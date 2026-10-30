@@ -1,29 +1,70 @@
 # Infinity Bazaar ∞
 
-Give an AI agent a goal and a budget. It picks what to buy from a catalog, negotiates with three AI sellers at once, plays them against each other, and pays through PayPal. **AgentGuard**, plain code rather than AI, checks every payment against the rules you set.
+Give an AI agent a goal and a budget. It picks what to buy from a catalog, negotiates with three AI sellers at once, plays them against each other, and pays through PayPal. **AgentGuard**, plain code rather than AI, checks every payment against the rules you set before any money can move.
 
 Built for the PayPal AI Hackathon 2026.
 
-## What works today
+## Run it
 
-- **Catalog data** (`data/`): 40 items, 10 seller personalities, 10 random events, 3 missions.
-- **Negotiation engine** (`src/engine/`): anchoring, a walk-away price, shrinking concessions, leverage between sellers, fee checks, trading for extras, trick detection, seller memory and random events. Seeded, so any run can be replayed.
-- **AgentGuard** (`src/engine/guard.ts`): item caps, total budget, blocked sellers, and an ask-me-first line.
-
-## Try it
-
-Requires Node.js 22.18 or newer. No API keys needed.
+Requires Node.js 22.18 or newer. No API keys are needed for the current version.
 
 ```bash
 npm install
-npm run demo          # a full "hackathon in 10 days, $300" mission
-npm run demo:rogue    # the agent falls for an upsell; AgentGuard blocks it
-npm test
+npm run dev           # deal room at http://localhost:3000
 ```
 
-## Coming next
+```bash
+npm run demo          # a full "hackathon in 10 days, $300" mission in the terminal
+npm run demo:rogue    # the agent falls for an upsell; AgentGuard blocks it
+npm test              # engine tests
+```
 
-The deal room web app, the AI voice for each seller, and PayPal sandbox payments (authorize, capture on delivery, refund).
+## How a mission works
+
+```mermaid
+flowchart LR
+  you[You: goal, budget, ask-me line] --> plan[Agent plans the shopping list]
+  plan --> deal1[Deal room: 3 sellers]
+  plan --> deal2[Deal room: 3 sellers]
+  plan --> deal3[Deal room: 3 sellers]
+  deal1 & deal2 & deal3 --> guard{AgentGuard}
+  guard -- approve --> pp[PayPal]
+  guard -- ask you --> ok[You approve or decline] --> pp
+  guard -- block --> stop[No PayPal call]
+  pp --> receipt[Receipt and savings]
+```
+
+1. **Plan.** The agent picks items from the catalog and sets a cap for each.
+2. **Negotiate.** For each item, three randomized sellers with hidden lowest prices and their own tactics negotiate in parallel. The agent:
+   - anchors just under the web low
+   - knows its walk-away price
+   - raises its offer in shrinking steps
+   - uses one seller's offer as leverage against the others
+   - checks for hidden fees and trades for extras instead of paying more
+   - flags tricks such as fake urgency
+3. **Guard.** AgentGuard checks the item cap, the total budget and the seller, and asks you before any payment above your ask-me line.
+4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery. A failed delivery voids the hold or refunds the payment.
+
+## What's in the repo
+
+| Path | What it is |
+| --- | --- |
+| `data/` | Catalog of 40 items, 10 seller personalities, 10 random events, 3 missions |
+| `src/engine/` | Negotiation engine, AgentGuard and mission runner: pure TypeScript and seeded, so any run replays exactly |
+| `lib/timeline.ts` | Turns engine results into the step-by-step playback the deal room shows |
+| `components/DealRoom.tsx`, `app/` | The Next.js deal room |
+| `tests/` | Engine tests: plans, determinism, floors, walk-away, AgentGuard, missions, seller memory |
+
+## Status
+
+| Part | State |
+| --- | --- |
+| Catalog, negotiation engine, AgentGuard | Done, tested |
+| Deal room web app | Working; arena redesign in progress |
+| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void, refund) | Next. The deal room currently shows **simulated** PayPal calls |
+| AI voices for sellers | Planned. The engine decides every price; the AI only rewrites the wording |
+
+Catalog prices are hand-researched estimates (`confidence: "estimate"`), not live data.
 
 ## License
 
