@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updated": "2026-10-30",
-  "note": "Prices are USD estimates (confidence=estimate). The app refreshes them with live web search using verifyQuery.",
+  "note": "Prices are USD estimates (confidence=estimate). verifyQuery is a search phrase for checking each price.",
   "groups": [
     {
       "id": "online",

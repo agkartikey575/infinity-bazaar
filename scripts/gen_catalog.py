@@ -1,7 +1,7 @@
 """Generates data/catalog.json for Infinity Bazaar from compact item rows.
 
 Prices are USD estimates for late 2026, marked confidence="estimate".
-The app should refresh them with live web search (see verifyQuery).
+verifyQuery is a search phrase for checking each price by hand or later by the app.
 """
 import json, sys, pathlib
 
@@ -271,7 +271,7 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
 catalog = {
     "version": 1,
     "updated": "2026-10-30",
-    "note": "Prices are USD estimates (confidence=estimate). The app refreshes them with live web search using verifyQuery.",
+    "note": "Prices are USD estimates (confidence=estimate). verifyQuery is a search phrase for checking each price.",
     "groups": [{"id": k, "name": v} for k, v in GROUPS.items()],
     "items": items,
 }
