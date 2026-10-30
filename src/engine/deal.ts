@@ -42,12 +42,17 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
   const beats: Beat[] = [];
   const active = () => sellers.filter((s) => s.active);
   const byRank = (list = active()) => [...list].sort((a, b) => rank(a, item) - rank(b, item));
-  const affordable = (s: Seller) => allIn(s) <= plan.walkAway;
+  // Today's price must fit the walk-away price, and later fees (renewals) can't
+  // push the true cost far past it.
+  let limit = plan.walkAway;
+  const affordable = (s: Seller) => allIn(s) <= limit && allIn(s) + laterFee(s) <= plan.walkAway * 1.5;
   const agreed = (s: Seller) => s.agreedAt !== null && s.agreedAt === s.ask;
   // The rogue demo is a set scene, so random events stay off there.
   const { scheduled, afterPayment } = scheduleEvents(item, sellers, rng, rogue ? { ...opts, events: false } : opts);
 
   let outcome: DealOutcome | null = null;
+  /** Set when rounds are over: the best affordable seller wins even if a pricier rival ranks higher. */
+  let closingTime = false;
   let lastOffer = plan.offers[0];
 
   const comment = (round: number, t: string) => {
@@ -107,9 +112,11 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       beats.push({ kind: "detect", round, sellerId: s.id, tactic: "hidden-fee", text: `Detected: hidden fee of $${s.fee.valueUsd}` });
       comment(round, text.commentary("surprise", { name: s.name, fee: s.fee.valueUsd }));
     }
-    const others = active().filter((o) => o !== s && affordable(o));
+    // Compare with every seller still at the table: one just over the line may still come down.
+    const others = active().filter((o) => o !== s);
+    const affordableOthers = others.filter(affordable);
     const bestOtherRank = others.length ? Math.min(...others.map((o) => rank(o, item))) : Infinity;
-    const bestOtherAllIn = others.length ? Math.min(...others.map((o) => allIn(o))) : Infinity;
+    const bestOtherAllIn = affordableOthers.length ? Math.min(...affordableOthers.map((o) => allIn(o))) : Infinity;
     const fee = payNowFee(s);
 
     // A fee charged now pushed this seller over the line or behind a rival: ask them to absorb it.
@@ -125,12 +132,13 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       }
     }
     if (!affordable(s)) {
-      agentSay(round, [s], "reject-fee", text.agent("rejectFee", { fee }));
+      const later = laterFee(s);
+      agentSay(round, [s], "reject-fee", allIn(s) <= plan.walkAway && later ? text.agent("rejectLaterFee", { fee: later }) : text.agent("rejectFee", { fee }));
       comment(round, text.commentary("rejectFee", { name: s.name }));
       s.active = false;
       return false;
     }
-    if (rank(s, item) > bestOtherRank) return false;
+    if (rank(s, item) > bestOtherRank && !closingTime) return false;
     finish(s, round);
     return true;
   };
@@ -192,9 +200,14 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       }
     }
 
-    // Sellers whose final all-in price is over the line are thanked and dropped.
+    // Drop sellers who can never fit: a final price over the line, or a known
+    // later fee that would break the budget even at the agent's opening offer.
     for (const s of active()) {
-      if (s.final && !affordable(s)) {
+      const later = laterFee(s);
+      if (later && plan.anchor + later > plan.walkAway * 1.5) {
+        agentSay(round, [s], "priced-out", text.agent("rejectLaterFee", { fee: later }));
+        s.active = false;
+      } else if (s.final && !affordable(s)) {
         agentSay(round, [s], "priced-out", text.agent("pricedOut"));
         s.active = false;
       }
@@ -225,6 +238,8 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       const isBest = s === best || ref === null;
       let cash = ladder - payNowFee(s);
       if (!isBest) cash = Math.min(cash, ref! - payNowFee(s) - 1);
+      // Never offer more than could still be worth it once known later fees are counted.
+      cash = Math.min(cash, Math.floor(plan.walkAway * 1.5) - laterFee(s) - payNowFee(s));
       if (cash < 1) continue;
       cash = Math.min(cash, s.ask);
       if (isBest) lastOffer = cash;
@@ -249,11 +264,30 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
   // Out of rounds: take the best affordable offer, otherwise walk away.
   if (!outcome) {
     const lastRound = Math.min(maxRounds, beats.reduce((m, b) => Math.max(m, b.round), 1));
+    closingTime = true;
+    // Stretch: pay a little over the walk-away price when that lowers the true total cost.
+    const bestNow = byRank(active().filter(affordable))[0];
+    const trueCost = (s: Seller) => allIn(s) + laterFee(s);
+    // Total cost of ownership: pay more cash only if it beats the best option's true total.
+    limit = bestNow ? Math.min(plan.cap, Math.max(plan.stretch, trueCost(bestNow) - 1)) : plan.stretch;
+    const bestStretched = byRank(active().filter(affordable))[0];
+    if (bestStretched && bestStretched !== bestNow && (!bestNow || trueCost(bestStretched) < trueCost(bestNow))) {
+      agentSay(lastRound, [bestStretched], "explain", text.agent("stretch", { name: bestStretched.name, extra: allIn(bestStretched) - plan.walkAway }));
+    } else {
+      limit = plan.walkAway;
+    }
     for (const s of byRank(active().filter(affordable))) {
       if (!s.leverAsked && !agreed(s) && s.ask > lastOffer) tradeForLever(s, lastRound);
       if (tryClose(s, lastRound)) break;
     }
     if (!outcome) {
+      // Anyone who said yes but costs too much once later fees count gets a clear no.
+      for (const s of active()) {
+        if (agreed(s) && laterFee(s)) {
+          agentSay(lastRound, [s], "priced-out", text.agent("rejectLaterFee", { fee: laterFee(s) }));
+          s.active = false;
+        }
+      }
       if (active().length) agentSay(lastRound, active(), "walk-away", text.agent("walkAway", { walk: plan.walkAway }));
       else comment(lastRound, text.commentary("allLeft"));
       comment(lastRound, text.commentary("walkAway"));

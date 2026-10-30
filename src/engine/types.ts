@@ -114,6 +114,10 @@ export interface BuyerPlan {
   anchor: number;
   target: number;
   walkAway: number;
+  /** Up to 10% over walk-away (never over the cap), used only when it lowers the true total cost. */
+  stretch: number;
+  /** Hard ceiling for this item: the mission's item cap, or the web high price. */
+  cap: number;
   /** Planned offers, rising in shrinking steps from anchor to walkAway. */
   offers: number[];
 }

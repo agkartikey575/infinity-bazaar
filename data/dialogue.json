@@ -95,6 +95,15 @@
     "explainReliability": [
       "Going with {name}: ${extra} more than the cheapest, but far more likely to deliver on time.",
       "{name} costs ${extra} more, and their delivery record is worth it."
+    ],
+    "rejectLaterFee": [
+      "A ${fee} charge later makes this the most expensive option. I'll pass.",
+      "With ${fee} coming later, you cost more than the others. No deal.",
+      "That ${fee} later is a dealbreaker. Thanks, but no."
+    ],
+    "stretch": [
+      "I'll go ${extra} over my limit for {name}. No later fees beats a cheaper sticker price.",
+      "{name} is ${extra} above my limit, but the cheaper offers carry later fees. Worth it."
     ]
   },
   "sellers": {

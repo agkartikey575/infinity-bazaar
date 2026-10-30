@@ -1,8 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { catalog, getItem, missions, sellerData } from "../src/engine/index.ts";
-import { buildMissionRun, buildSingleRun, buildSteps, deriveView, stepDelay, type Decision, type LineStatus } from "../lib/timeline.ts";
+import {
+  buildMissionRun,
+  buildSingleRun,
+  buildSteps,
+  deriveView,
+  stepDelay,
+  type BoothView,
+  type Decision,
+  type LineStatus,
+  type Run,
+} from "../lib/timeline.ts";
 
 const SPEEDS = [0.5, 1, 2, 4];
 const FACE_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
@@ -12,15 +22,106 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   negotiating: "Negotiating",
   checking: "AgentGuard check",
   "awaiting-approval": "Needs your OK",
-  paid: "Paid",
-  held: "Paid, held until delivery",
+  authorized: "Held until delivery",
+  captured: "Paid",
   declined: "Declined",
   blocked: "Blocked",
   "no-deal": "Walked away",
+  voided: "Hold voided",
   refunded: "Refunded",
 };
 
 const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
+const money = (n: number) => `$${n.toFixed(2)}`;
+
+function Booth({ booth, color, floor }: { booth: BoothView; color: string; floor: number | null }) {
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [booth.messages.length]);
+
+  return (
+    <div className={`booth ${booth.state}`}>
+      <div className="bhead">
+        <div className="face" style={{ background: color }} aria-hidden="true">
+          {booth.name[0]}
+        </div>
+        <div className="bname">
+          <h3>{booth.name}</h3>
+          <span>{archetypeLabel(booth.archetype)}</span>
+        </div>
+        <div className="bprice" aria-label={`${booth.name} asks $${booth.price}`}>
+          ${booth.price}
+        </div>
+      </div>
+      {booth.state === "blocked" && <div className="stamp">Blocked by AgentGuard</div>}
+      <div className="log" ref={logRef}>
+        {booth.messages.map((m, k) => (
+          <div key={k} className={`msg ${m.from}`}>
+            <span className="who">{m.from === "agent" ? "Your agent" : booth.name}</span>
+            {m.text && <div className="b">{m.text}</div>}
+            {m.tag && <span className={`tag ${m.tagKind}`}>{m.tag}</span>}
+          </div>
+        ))}
+      </div>
+      {floor !== null && <div className="floor">Hidden floor was ${floor}</div>}
+    </div>
+  );
+}
+
+function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
+  let paid = 0;
+  let saved = 0;
+  const rows = run.lines.map((l, i) => {
+    const o = l.deal.outcome;
+    const item = getItem(l.itemId);
+    const settled = statuses[i] === "captured";
+    if (settled) {
+      paid += o.amountToPay ?? 0;
+      saved += item.price.typical - (o.amountToPay ?? 0);
+    }
+    return { l, o, i, settled };
+  });
+  return (
+    <div className="receipt">
+      <div className="receipt-head">
+        <span className="label">Mission receipt</span>
+        <b>
+          Paid {money(paid)} of {money(run.budgetUsd)} · saved {money(Math.max(0, saved))} against typical prices
+        </b>
+      </div>
+      <div className="tbl">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Seller</th>
+              <th>Paid</th>
+              <th>vs typical</th>
+              <th>Extras won</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ l, o, i, settled }) => (
+              <tr key={i}>
+                <td>{l.itemName}</td>
+                <td>{o.sellerName ?? "—"}</td>
+                <td className="num">{settled ? money(o.amountToPay ?? 0) : "—"}</td>
+                <td className="num">{settled && o.savedVsTypical !== undefined ? `${o.savedVsTypical > 0 ? "−" : "+"}${Math.abs(o.savedVsTypical)}%` : "—"}</td>
+                <td>{o.levers.length ? o.levers.map((x) => x.label).join(", ") : "—"}</td>
+                <td>
+                  <span className={`pill ${statuses[i]}`}>{STATUS_LABEL[statuses[i]]}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function DealRoom() {
   const [selection, setSelection] = useState("mission:hackathon-10-days");
@@ -30,6 +131,7 @@ export default function DealRoom() {
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const approveRef = useRef<HTMLButtonElement>(null);
 
   const run = useMemo(() => {
     if (rogue) return buildSingleRun("usb-mic", seed, true);
@@ -49,6 +151,10 @@ export default function DealRoom() {
     return () => clearTimeout(t);
   }, [playing, cursor, steps, speed]);
 
+  useEffect(() => {
+    if (awaiting) approveRef.current?.focus();
+  }, [awaiting]);
+
   const restart = (next: { selection?: string; seed?: number; rogue?: boolean }) => {
     if (next.selection !== undefined) setSelection(next.selection);
     if (next.seed !== undefined) setSeed(next.seed);
@@ -61,13 +167,19 @@ export default function DealRoom() {
   const decide = (d: Decision) => {
     if (waitingFor === null) return;
     setDecisions((prev) => ({ ...prev, [waitingFor]: d }));
+    setPlaying(true);
   };
 
   const line = run.lines[view.line];
   const item = line ? getItem(line.itemId) : null;
-  const spentShare = Math.min(100, (view.spentUsd / run.budgetUsd) * 100);
-  const pendingShare = Math.min(100 - spentShare, (view.pendingUsd / run.budgetUsd) * 100);
-  const askLine = Math.min(100, (run.askAboveUsd / run.budgetUsd) * 100);
+  const pct = (n: number) => Math.min(100, (n / run.budgetUsd) * 100);
+  const capturedShare = pct(view.capturedUsd);
+  const heldShare = Math.min(100 - capturedShare, pct(view.committedUsd - view.capturedUsd));
+  const pendingShare = Math.min(100 - capturedShare - heldShare, pct(view.pendingUsd));
+  const askLine = pct(run.askAboveUsd);
+  const asking = awaiting ? run.lines[waitingFor!] : null;
+  const askItem = asking ? getItem(asking.itemId) : null;
+  const askGuard = awaiting ? view.guard : null;
 
   return (
     <main className="wrap">
@@ -103,14 +215,32 @@ export default function DealRoom() {
               ))}
             </select>
           </label>
+          <label className="field table-no">
+            <span className="label">Table #</span>
+            <input
+              id="seed"
+              type="number"
+              min={1}
+              value={seed}
+              onChange={(e) => {
+                const n = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                restart({ seed: n, rogue });
+              }}
+            />
+          </label>
           <div className="btns">
-            <button className="primary" onClick={() => (finished ? restart({ selection, seed, rogue }) : setPlaying((p) => !p))}>
-              {finished ? "↺ Replay" : playing && !awaiting ? "❚❚ Pause" : "▶ Play"}
+            <button
+              className="primary"
+              disabled={awaiting}
+              onClick={() => (finished ? restart({ seed, rogue }) : setPlaying((p) => !p))}
+              aria-label={finished ? "Replay" : playing ? "Pause" : "Play"}
+            >
+              {finished ? "↺ Replay" : playing ? "❚❚ Pause" : "▶ Play"}
             </button>
-            <button onClick={() => restart({ selection, seed: Math.floor(Math.random() * 1e6) })} title="Shuffle sellers, floors and events">
+            <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Shuffle sellers, floors and events">
               🎲 New table
             </button>
-            <button onClick={() => setCursor(steps.length)} disabled={cursor >= steps.length}>
+            <button onClick={() => setCursor(steps.length)} disabled={cursor >= steps.length} aria-label="Skip to the next decision or the end">
               ⏭ Skip
             </button>
             <button className="danger" onClick={() => restart({ seed, rogue: true })}>
@@ -135,19 +265,28 @@ export default function DealRoom() {
           <div className="goal-box">
             <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Rogue demo" : "Single deal"}</span>
             <p className="goal">“{run.goal}”</p>
-            <span className="note">Table #{run.seed}. The same table number always replays the same deal.</span>
+            <span className="note">Table #{run.seed} always replays the same deal.</span>
           </div>
           <div className="budget">
             <span className="label">AgentGuard budget</span>
-            <div className="bbar">
-              <div className="bfill" style={{ width: `${spentShare}%` }} />
-              <div className="bpending" style={{ left: `${spentShare}%`, width: `${pendingShare}%` }} />
+            <div className="bbar" role="img" aria-label={`Committed $${view.committedUsd} of $${run.budgetUsd}`}>
+              <div className="bfill" style={{ width: `${capturedShare}%` }} />
+              <div className="bheld" style={{ left: `${capturedShare}%`, width: `${heldShare}%` }} />
+              <div className="bpending" style={{ left: `${capturedShare + heldShare}%`, width: `${pendingShare}%` }} />
               <div className="bask" style={{ left: `${askLine}%` }} title={`Ask me above $${run.askAboveUsd}`} />
             </div>
             <div className="bnums">
-              <span>Spent ${view.spentUsd}</span>
-              {view.pendingUsd > 0 && <span>Waiting ${view.pendingUsd}</span>}
-              <span>Ask me above ${run.askAboveUsd}</span>
+              <span>
+                <i className="dot paid" /> Paid ${view.capturedUsd}
+              </span>
+              <span>
+                <i className="dot held" /> Held ${view.committedUsd - view.capturedUsd}
+              </span>
+              {view.pendingUsd > 0 && (
+                <span>
+                  <i className="dot pending" /> Waiting ${view.pendingUsd}
+                </span>
+              )}
               <span>Budget ${run.budgetUsd}</span>
             </div>
           </div>
@@ -179,10 +318,11 @@ export default function DealRoom() {
               <span className="label">{item.name} · offer ladder</span>
               <div className="rungs">
                 {view.plan.offers.map((o, i) => (
-                  <span key={o} className={`rung${i === view.offerIndex ? " now" : i < view.offerIndex ? " used" : ""}`}>
+                  <span key={o} className={`rung${view.dealPrice === null && i === view.offerIndex ? " now" : i <= view.offerIndex ? " used" : ""}`}>
                     ${o}
                   </span>
                 ))}
+                {view.dealPrice !== null && <span className="rung deal">Deal ${view.dealPrice}</span>}
               </div>
             </div>
           </div>
@@ -190,37 +330,21 @@ export default function DealRoom() {
 
         <div className="booths">
           {view.booths.map((b, i) => (
-            <div key={b.id} className={`booth${b.won ? " won" : ""}${b.out && !b.won ? " out" : ""}`}>
-              <div className="bhead">
-                <div className="face" style={{ background: FACE_COLORS[i % 3] }}>
-                  {b.name[0]}
-                </div>
-                <div className="bname">
-                  <h3>{b.name}</h3>
-                  <span>{archetypeLabel(b.archetype)}</span>
-                </div>
-                <div className="bprice">${b.price}</div>
-              </div>
-              <div className="log">
-                {b.messages.map((m, k) => (
-                  <div key={k} className={`msg ${m.from}`}>
-                    <span className="who">{m.from === "agent" ? "Your agent" : b.name}</span>
-                    {m.text && <div className="b">{m.text}</div>}
-                    {m.tag && <span className={`tag ${m.tagKind}`}>{m.tag}</span>}
-                  </div>
-                ))}
-              </div>
-              {view.revealFloors && (
-                <div className="floor">Hidden floor: ${run.lines[view.line].deal.sellers.find((s) => s.id === b.id)?.floor}</div>
-              )}
-            </div>
+            <Booth
+              key={`${view.line}-${b.id}`}
+              booth={b}
+              color={FACE_COLORS[i % 3]}
+              floor={view.revealFloors ? run.lines[view.line].deal.sellers.find((s) => s.id === b.id)?.floor ?? null : null}
+            />
           ))}
         </div>
 
         <div className="rail">
           <div>
             <span className="label">Commentator</span>
-            <p className="caster">{view.commentary[0] ?? "Press play to start."}</p>
+            <p className="caster" aria-live="polite">
+              {view.commentary[0] ?? "Press play to start."}
+            </p>
             <div className="history">
               {view.commentary.slice(1).map((c, i) => (
                 <span key={i}>· {c}</span>
@@ -230,7 +354,7 @@ export default function DealRoom() {
           </div>
           <div>
             <span className="label">AgentGuard and PayPal sandbox</span>
-            <div className="checkout">
+            <div className="checkout" aria-live="polite">
               {view.checkout.length === 0 && <div className="row-info">Waiting for a deal…</div>}
               {view.checkout.map((r, i) => (
                 <div key={i} className={`row-${r.tone}`}>
@@ -238,21 +362,7 @@ export default function DealRoom() {
                 </div>
               ))}
             </div>
-            {awaiting && (
-              <div className="approve">
-                <p>
-                  Your agent wants to pay <b>${run.lines[waitingFor!].deal.outcome.amountToPay}</b> to {run.lines[waitingFor!].deal.outcome.sellerName} for{" "}
-                  {run.lines[waitingFor!].itemName.toLowerCase()}.
-                </p>
-                <div className="btns">
-                  <button className="primary" onClick={() => decide("approved")}>
-                    Approve
-                  </button>
-                  <button onClick={() => decide("declined")}>Decline</button>
-                </div>
-              </div>
-            )}
-            <span className="note">PayPal calls are simulated until the sandbox keys are connected.</span>
+            <span className="note">PayPal calls are simulated in this version; sandbox payments come next.</span>
           </div>
         </div>
 
@@ -261,14 +371,55 @@ export default function DealRoom() {
           <div className="rows">
             {run.lines.map((l, i) => (
               <div key={l.itemId + i} className={`row${i === view.line && !finished ? " current" : ""}`}>
-                <span>{l.itemName}</span>
+                <span className="row-name">{l.itemName}</span>
                 <span className={`pill ${view.statuses[i]}`}>{STATUS_LABEL[view.statuses[i]]}</span>
                 <b>{view.amounts[i] !== null ? `$${view.amounts[i]}` : "—"}</b>
               </div>
             ))}
           </div>
         </div>
+
+        {finished && <Receipt run={run} statuses={view.statuses} />}
       </section>
+
+      {asking && askItem && (
+        <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+          <div className="sheet-card">
+            <span className="label">AgentGuard needs your OK</span>
+            <h2 id="sheet-title">
+              Pay {money(asking.deal.outcome.amountToPay ?? 0)} to {asking.deal.outcome.sellerName}?
+            </h2>
+            <dl className="breakdown">
+              <dt>Item</dt>
+              <dd>{asking.itemName}</dd>
+              <dt>Price</dt>
+              <dd>{money(asking.deal.outcome.price ?? 0)}</dd>
+              {asking.deal.outcome.fee > 0 && (
+                <>
+                  <dt>Fee charged now</dt>
+                  <dd>{money(asking.deal.outcome.fee)}</dd>
+                </>
+              )}
+              {asking.deal.outcome.futureFee > 0 && (
+                <>
+                  <dt>Later cost</dt>
+                  <dd>{money(asking.deal.outcome.futureFee)} (not charged now)</dd>
+                </>
+              )}
+              <dt>How PayPal pays</dt>
+              <dd>{askItem.paypalFlow === "capture_now" ? "Charged now (digital delivery)" : "Held now, charged when delivered"}</dd>
+              <dt>Why you're asked</dt>
+              <dd>{askGuard?.summary.replace(/^ASKING YOU: /, "") ?? ""}</dd>
+            </dl>
+            <div className="btns">
+              <button ref={approveRef} className="primary" onClick={() => decide("approved")}>
+                Approve in PayPal
+              </button>
+              <button onClick={() => decide("declined")}>Decline</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
