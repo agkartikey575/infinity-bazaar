@@ -1,0 +1,22 @@
+{
+  "name": "infinity-bazaar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI agents negotiate with AI sellers and pay through PayPal, inside rules a human sets.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test tests/engine.test.ts",
+    "validate": "node scripts/validate-data.mjs",
+    "typecheck": "tsc --noEmit",
+    "demo": "node scripts/demo.ts mission hackathon-10-days",
+    "demo:rogue": "node scripts/demo.ts deal usb-mic 7 --rogue"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.8.3"
+  }
+}

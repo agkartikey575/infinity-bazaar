@@ -18,6 +18,8 @@ COST = {
     "merch":    {"costShare": [0.50, 0.65], "minMargin": 0.12},
 }
 
+PAY_NOW = {"shipping", "setup", "delivery"}
+
 GROUPS = {
     "online": "Online services",
     "design": "Design",
@@ -262,7 +264,8 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
                    "floorRange": floor_range(typ, p)},
         "sellerTypes": sellers,
         "levers": [{"id": a, "label": b, "valueUsd": c} for a, b, c in levers],
-        "hiddenFees": [{"id": a, "label": b, "valueUsd": c} for a, b, c in fees],
+        # payNow: charged at checkout (shipping, setup). Otherwise a later cost (renewal, limits).
+        "hiddenFees": [{"id": a, "label": b, "valueUsd": c, "payNow": a in PAY_NOW} for a, b, c in fees],
     })
 
 catalog = {

@@ -14,7 +14,9 @@ The deal engine reads these files. Run `node scripts/validate-data.mjs` after an
 1. Pick 3 archetypes from the item's `sellerTypes`.
 2. Hidden floor = a point inside `seller.floorRange`, placed by the archetype's `floorBias` (0 = bottom, 1 = top), plus a little noise.
 3. Opening price = `price.typical` × a random value inside the archetype's `openMarkup`.
-4. Each turn the seller concedes a share of the gap to its floor, using `concessionSpeed`.
+4. Each round the seller concedes a share of the typical price (`concessionSpeed`), faster in later rounds, never below its floor.
+
+Hidden fees with `payNow: true` (shipping, setup) are charged at checkout. The others (renewals, usage limits) are later costs the agent counts when comparing sellers.
 
 ## Price confidence
 
