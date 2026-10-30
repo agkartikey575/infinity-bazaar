@@ -1,7 +1,7 @@
 // Spawns randomized sellers for an item and decides how each one answers an offer.
 import { getArchetype, sellerData } from "./data.ts";
 import type { Rng } from "./rng.ts";
-import { detectLabel, say } from "./text.ts";
+import { join, type Writer } from "./text.ts";
 import type { Beat, CatalogItem, Seller, SellerMemory } from "./types.ts";
 
 export function spawnSellers(item: CatalogItem, rng: Rng, memory: SellerMemory = {}, forceUpseller = false): Seller[] {
@@ -41,19 +41,40 @@ export function spawnSellers(item: CatalogItem, rng: Rng, memory: SellerMemory =
       leverAsked: false,
       upsellPrice: null,
       usedTactics: [],
+      agreedAt: null,
     };
   });
 }
 
+/** Fee charged at checkout that the buyer knows about. */
+export const payNowFee = (s: Seller) => (s.fee && s.feeRevealed && s.fee.payNow ? s.fee.valueUsd : 0);
+/** Later fee (renewal, limits) that the buyer knows about. */
+export const laterFee = (s: Seller) => (s.fee && s.feeRevealed && !s.fee.payNow ? s.fee.valueUsd : 0);
+/** What the buyer pays now: price plus any known checkout fee. */
+export const allIn = (s: Seller, price = s.ask) => price + payNowFee(s);
+
+/**
+ * The one ranking used everywhere: all-in price plus known later fees,
+ * divided by delivery reliability for anything that isn't delivered instantly.
+ * Extras won are a bonus and never offset cash.
+ */
+export function rank(s: Seller, item: CatalogItem, price = s.ask): number {
+  const cost = allIn(s, price) + laterFee(s);
+  return item.delivery === "instant" ? cost : cost / Math.max(0.5, s.reliability);
+}
+
 export interface ReplyContext {
   rng: Rng;
+  text: Writer;
   item: CatalogItem;
   round: number;
-  /** Best competing price the agent quoted to this seller, if any. */
+  /** Best competing all-in price the agent quoted to this seller, if any. */
   leverageRef: number | null;
   rogue: boolean;
   /** The agent said this is its last offer. */
   finalOffer: boolean;
+  /** The agent raised an item-specific doubt with this offer. */
+  doubted: boolean;
 }
 
 export interface Reply {
@@ -65,18 +86,32 @@ export interface Reply {
 
 const NO_TACTIC = new Set(["hidden-fee", "teaser-price"]);
 
+export const DETECT_LABEL: Record<string, string> = {
+  "false-urgency": "false urgency",
+  "phantom-buyer": "invented rival buyer",
+  "hidden-fee": "hidden fee",
+  "teaser-price": "teaser price",
+  overpromise: "overpromise",
+  upsell: "upsell",
+};
+
+/** A seller's answer to a cash offer. Sellers never counter below the offer and never go below their floor. */
 export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
-  const { rng, item, round } = ctx;
+  const { rng, text, item, round } = ctx;
+  const a = s.archetype.id;
   const beats: Beat[] = [];
   const closeEnough = Math.max(1, Math.round(item.price.typical * 0.03));
-
   // A final offer at or above the floor is usually taken; stubborn sellers sometimes hold out.
   const takesFinal = ctx.finalOffer && offer >= s.floor && rng.chance(s.archetype.concession === "slow" ? 0.65 : 0.9);
-  if (offer >= s.ask || (offer >= s.floor && s.ask - offer <= closeEnough) || takesFinal) {
-    s.ask = offer;
-    beats.push({ kind: "seller", round, sellerId: s.id, move: "accept", price: offer, text: say.sellerAccept(rng, offer) });
-    return { beats, acceptedAt: offer, matched: false };
-  }
+
+  const accept = (price: number): Reply => {
+    s.ask = price;
+    s.agreedAt = price;
+    beats.push({ kind: "seller", round, sellerId: s.id, move: "accept", price, text: text.seller(a, "accept", { price }) });
+    return { beats, acceptedAt: price, matched: false };
+  };
+
+  if (offer >= s.ask || (offer >= s.floor && (s.ask - offer <= closeEnough || takesFinal))) return accept(Math.min(offer, s.ask));
 
   if (offer < s.floor * 0.75 && !s.insulted) {
     s.insulted = true;
@@ -90,29 +125,38 @@ export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
   const step = Math.max(1, item.price.typical * rng.range(cMin, cMax) * s.concessionBoost * urgency * (s.mood < 0 ? 0.5 : 1));
   let next = Math.max(s.floor, Math.round(s.ask - step));
 
+  // Competition: match or undercut the best all-in quote, compared like for like.
   let matched = false;
-  if (ctx.leverageRef !== null && ctx.leverageRef < next) {
-    const base = { fast: 0.85, medium: 0.6, slow: 0.3 }[s.archetype.concession];
-    const boost = s.archetype.softSpots.includes("competitor-offer") ? 1.25 : 1;
-    if (rng.chance(base * boost)) {
-      const undercut = s.archetype.concession === "fast" ? 2 : 1;
-      const m = Math.max(s.floor, ctx.leverageRef - undercut);
-      if (m < next) {
-        next = m;
-        matched = true;
+  if (ctx.leverageRef !== null) {
+    const refCash = ctx.leverageRef - payNowFee(s);
+    if (refCash < next) {
+      const base = { fast: 0.85, medium: 0.6, slow: 0.3 }[s.archetype.concession];
+      const boost = s.archetype.softSpots.includes("competitor-offer") ? 1.25 : 1;
+      if (rng.chance(base * boost)) {
+        const m = Math.max(s.floor, refCash - (s.archetype.concession === "fast" ? 2 : 1));
+        if (m < next) {
+          next = m;
+          matched = true;
+        }
       }
     }
   }
 
+  // Never counter at or below the buyer's own offer: that is simply a yes.
+  if (next <= offer) return accept(offer);
+
   s.ask = next;
   s.final = s.ask <= s.floor;
+  const rebut = ctx.doubted && text.chance(0.6) ? text.talk("rebut") : "";
+  const pitch = !rebut && round > 1 && text.chance(0.3) ? text.talk("pitch") : "";
+  const opener = round === 1 ? (text.chance(0.5) ? text.talk("small") : text.talk("pitch")) : "";
   beats.push({
     kind: "seller",
     round,
     sellerId: s.id,
     move: s.final ? "final" : "counter",
     price: s.ask,
-    text: s.final ? say.final(rng, s.ask) : say.counter(rng, s.ask),
+    text: join(opener, rebut, text.seller(a, s.final ? "final" : "counter", { price: s.ask }), pitch),
   });
 
   // Rogue demo: the upseller always pitches a premium bundle in round 1.
@@ -130,29 +174,12 @@ export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
         move: "tactic",
         tactic,
         price: tactic === "upsell" ? s.upsellPrice ?? undefined : undefined,
-        text: say.tactic(rng, tactic, s.upsellPrice ?? undefined),
+        text: text.tactic(a, tactic, { upsell: s.upsellPrice ?? undefined }),
       });
       if (sellerData.detectable.includes(tactic)) {
-        beats.push({ kind: "detect", round, sellerId: s.id, tactic, text: `Detected: ${detectLabel[tactic] ?? tactic}` });
+        beats.push({ kind: "detect", round, sellerId: s.id, tactic, text: `Detected: ${DETECT_LABEL[tactic] ?? tactic}` });
       }
     }
   }
   return { beats, acceptedAt: null, matched };
-}
-
-/** Price + known fees − value of levers won. Compares sellers like for like. */
-export function effectiveCost(s: Seller, price = s.ask): number {
-  const fee = s.fee && s.feeRevealed ? s.fee.valueUsd : 0;
-  return price + fee - s.levers.reduce((sum, l) => sum + l.valueUsd, 0);
-}
-
-/** Price + known fees, without counting extras. What the deal really costs. */
-export function trueCost(s: Seller, price = s.ask): number {
-  return price + (s.fee && s.feeRevealed ? s.fee.valueUsd : 0);
-}
-
-/** Cost adjusted for delivery risk, used to rank sellers. */
-export function riskAdjusted(s: Seller, item: CatalogItem): number {
-  const cost = effectiveCost(s);
-  return item.delivery === "instant" ? cost : cost / Math.max(0.5, s.reliability);
 }

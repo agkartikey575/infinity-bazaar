@@ -1,14 +1,16 @@
 // Turns engine results into a step-by-step timeline the deal room plays back,
 // and works out what the screen shows at any point in that timeline.
-import { checkPayment, getItem, getMission, runDeal, runMission } from "../src/engine/index.ts";
-import type { Beat, BuyerPlan, DealResult, GuardDecision } from "../src/engine/index.ts";
+// AgentGuard runs here at playback time against a live ledger, so declines,
+// voids and refunds free money for the lines that follow.
+import { capFor, checkPayment, createRng, getItem, getMission, missionRules, runDeal, runMission } from "../src/engine/index.ts";
+import type { Beat, BuyerPlan, DealResult, GuardDecision, GuardRules } from "../src/engine/index.ts";
 
 export interface Line {
   itemId: string;
   itemName: string;
   itemCapUsd: number;
+  rules: GuardRules;
   deal: DealResult;
-  guard: GuardDecision | null;
 }
 
 export interface Run {
@@ -21,7 +23,7 @@ export interface Run {
   lines: Line[];
 }
 
-const DEFAULT_RULES = { budgetUsd: 300, askAboveUsd: 100 };
+const SINGLE_RULES = { budgetUsd: 300, askAboveUsd: 100 };
 
 export function buildMissionRun(missionId: string, seed: number): Run {
   const mission = getMission(missionId);
@@ -33,29 +35,25 @@ export function buildMissionRun(missionId: string, seed: number): Run {
     budgetUsd: mission.budgetUsd,
     askAboveUsd: mission.askAboveUsd,
     seed,
-    lines: result.lines.map((l) => ({ itemId: l.itemId, itemName: l.itemName, itemCapUsd: l.itemCapUsd, deal: l.deal, guard: l.guard })),
+    lines: result.lines.map((l) => ({ itemId: l.itemId, itemName: l.itemName, itemCapUsd: l.itemCapUsd, rules: missionRules(mission, l.itemCapUsd), deal: l.deal })),
   };
 }
 
 export function buildSingleRun(itemId: string, seed: number, rogue = false): Run {
   const item = getItem(itemId);
-  const suggested = getMission("hackathon-10-days").suggested.find((s) => s.item === itemId)?.itemCapUsd;
-  const cap = rogue ? 70 : suggested ?? item.price.high;
+  const mission = getMission("hackathon-10-days");
+  const suggested = mission.suggested.find((s) => s.item === itemId)?.itemCapUsd;
+  const cap = rogue ? 70 : capFor(mission, suggested ?? item.price.high, 0);
   const deal = runDeal(itemId, { seed, itemCapUsd: cap, rogue });
-  const o = deal.outcome;
-  const guard =
-    o.status === "deal"
-      ? checkPayment({ amount: o.amountToPay ?? o.price ?? 0, spentSoFar: 0, sellerName: o.sellerName ?? "", rules: { ...DEFAULT_RULES, itemCapUsd: cap } })
-      : null;
   return {
     kind: rogue ? "rogue" : "single",
     title: rogue ? "Rogue agent demo" : item.name,
     goal: rogue
-      ? `Get me the best possible ${item.name.toLowerCase()}. (Cap $${cap}, ask me above $${DEFAULT_RULES.askAboveUsd}.)`
-      : `Buy a ${item.name.toLowerCase()} (${item.unit}) at a good price.`,
-    ...DEFAULT_RULES,
+      ? `Get me the best possible ${item.name.toLowerCase()}. Cap $${cap}, ask me above $${SINGLE_RULES.askAboveUsd}.`
+      : `Buy ${item.phrase} (${item.unit}) at a good price.`,
+    ...SINGLE_RULES,
     seed,
-    lines: [{ itemId, itemName: item.name, itemCapUsd: cap, deal, guard }],
+    lines: [{ itemId, itemName: item.name, itemCapUsd: cap, rules: { ...SINGLE_RULES, itemCapUsd: cap }, deal }],
   };
 }
 
@@ -64,25 +62,21 @@ export type Decision = "approved" | "declined";
 export type Step =
   | { type: "line-start"; line: number }
   | { type: "beat"; line: number; beat: Beat }
-  | { type: "guard"; line: number }
+  | { type: "guard"; line: number; guard: GuardDecision }
   | { type: "approval"; line: number }
   | { type: "decision"; line: number; decision: Decision }
-  | { type: "paypal"; line: number; text: string; final: boolean }
-  | { type: "after-payment"; line: number; text: string }
-  | { type: "refund"; line: number; text: string }
+  | { type: "paypal"; line: number; text: string; effect?: "authorized" | "captured" | "voided" | "refunded" }
+  | { type: "event"; line: number; text: string }
   | { type: "line-end"; line: number };
 
-/** PayPal calls for a payment. Simulated until sandbox keys are connected. */
-export function paypalCalls(itemId: string, amount: number): string[] {
-  const item = getItem(itemId);
-  if (item.paypalFlow === "capture_now") {
-    return [`POST /v2/checkout/orders (intent CAPTURE, $${amount.toFixed(2)}) → CREATED`, `POST /v2/checkout/orders/{id}/capture → COMPLETED`];
-  }
-  return [
-    `POST /v2/checkout/orders (intent AUTHORIZE, $${amount.toFixed(2)}) → CREATED`,
-    `POST /v2/checkout/orders/{id}/authorize → $${amount.toFixed(2)} held until delivery`,
-  ];
+/** Deterministic PayPal-style ids, so a replay shows the same ids. */
+function paypalId(seed: number, line: number, salt: number): string {
+  const rng = createRng((seed * 31 + line * 977 + salt * 7919) >>> 0);
+  const chars = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+  return Array.from({ length: 17 }, () => chars[Math.floor(rng.next() * chars.length)]).join("");
 }
+
+const money = (n: number) => `$${n.toFixed(2)}`;
 
 /**
  * Builds steps up to the first approval that has no decision yet.
@@ -90,36 +84,57 @@ export function paypalCalls(itemId: string, amount: number): string[] {
  */
 export function buildSteps(run: Run, decisions: Record<number, Decision>): { steps: Step[]; waitingFor: number | null } {
   const steps: Step[] = [];
+  let committed = 0;
+
   for (let i = 0; i < run.lines.length; i++) {
     const line = run.lines[i];
+    const item = getItem(line.itemId);
+    const o = line.deal.outcome;
     steps.push({ type: "line-start", line: i });
     for (const beat of line.deal.beats) steps.push({ type: "beat", line: i, beat });
 
-    const o = line.deal.outcome;
-    if (o.status === "deal" && line.guard) {
-      steps.push({ type: "guard", line: i });
-      let pay = line.guard.decision === "approve";
-      if (line.guard.decision === "ask_user") {
+    if (o.status === "deal" && o.amountToPay !== undefined && o.sellerId) {
+      const amount = o.amountToPay;
+      const guard = checkPayment({
+        amount,
+        spentSoFar: committed,
+        sellerId: o.sellerId,
+        sellerName: o.sellerName ?? "",
+        group: item.group,
+        rules: line.rules,
+      });
+      steps.push({ type: "guard", line: i, guard });
+
+      let pay = guard.decision === "approve";
+      let viaPopup = false;
+      if (guard.decision === "ask_user") {
         steps.push({ type: "approval", line: i });
         const d = decisions[i];
         if (!d) return { steps, waitingFor: i };
         steps.push({ type: "decision", line: i, decision: d });
         pay = d === "approved";
+        viaPopup = pay;
       }
+
       if (pay) {
-        const amount = o.amountToPay ?? o.price ?? 0;
-        const calls = paypalCalls(line.itemId, amount);
-        calls.forEach((text, k) => steps.push({ type: "paypal", line: i, text, final: k === calls.length - 1 }));
-        if (o.afterPayment) {
-          steps.push({ type: "after-payment", line: i, text: o.afterPayment.text });
-          const held = getItem(line.itemId).paypalFlow !== "capture_now";
-          steps.push({
-            type: "refund",
-            line: i,
-            text: held
-              ? `POST /v2/payments/authorizations/{id}/void → VOIDED. The $${amount.toFixed(2)} hold is released.`
-              : `POST /v2/payments/captures/{id}/refund → COMPLETED. $${amount.toFixed(2)} back to you.`,
-          });
+        const orderId = paypalId(run.seed, i, 1);
+        const txId = paypalId(run.seed, i, 2);
+        const source = viaPopup ? "payment_source: paypal (you approved in PayPal)" : "payment_source: vaulted PayPal";
+        if (viaPopup) steps.push({ type: "paypal", line: i, text: `PayPal approval: you approved order ${orderId}` });
+        if (item.paypalFlow === "capture_now") {
+          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent CAPTURE · ${money(amount)} · ${source} → COMPLETED · capture ${txId}`, effect: "captured" });
+          committed += amount;
+        } else {
+          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent AUTHORIZE · ${money(amount)} · ${source} → authorization ${txId} CREATED (money held)`, effect: "authorized" });
+          committed += amount;
+          if (o.afterPayment) {
+            steps.push({ type: "event", line: i, text: o.afterPayment.text });
+            steps.push({ type: "paypal", line: i, text: `POST /v2/payments/authorizations/${txId}/void → VOIDED · ${money(amount)} hold released`, effect: "voided" });
+            committed -= amount;
+          } else {
+            steps.push({ type: "event", line: i, text: item.delivery === "service" ? `${o.sellerName} delivered the work.` : `${o.sellerName}'s package arrived.` });
+            steps.push({ type: "paypal", line: i, text: `POST /v2/payments/authorizations/${txId}/capture → COMPLETED · ${money(amount)} paid to ${o.sellerName}`, effect: "captured" });
+          }
         }
       }
     }
@@ -128,15 +143,25 @@ export function buildSteps(run: Run, decisions: Record<number, Decision>): { ste
   return { steps, waitingFor: null };
 }
 
-export type LineStatus = "waiting" | "negotiating" | "checking" | "awaiting-approval" | "paid" | "held" | "declined" | "blocked" | "no-deal" | "refunded";
+export type LineStatus =
+  | "waiting"
+  | "negotiating"
+  | "checking"
+  | "awaiting-approval"
+  | "authorized"
+  | "captured"
+  | "declined"
+  | "blocked"
+  | "no-deal"
+  | "voided"
+  | "refunded";
 
 export interface BoothView {
   id: string;
   name: string;
   archetype: string;
   price: number;
-  out: boolean;
-  won: boolean;
+  state: "open" | "out" | "won" | "blocked";
   messages: { from: "agent" | "seller"; text: string; tag?: string; tagKind?: "detect" | "move" }[];
 }
 
@@ -149,13 +174,16 @@ export interface View {
   line: number;
   plan: BuyerPlan | null;
   offerIndex: number;
+  dealPrice: number | null;
   booths: BoothView[];
   commentary: string[];
   event: string | null;
   checkout: CheckoutRow[];
+  guard: GuardDecision | null;
   statuses: LineStatus[];
   amounts: (number | null)[];
-  spentUsd: number;
+  committedUsd: number;
+  capturedUsd: number;
   pendingUsd: number;
   revealFloors: boolean;
 }
@@ -166,9 +194,15 @@ const AGENT_TAG: Partial<Record<string, string>> = {
   "ask-fees": "Fee check",
   "ask-lever": "Trade, don't cave",
   "absorb-fee": "Fee pushback",
+  "reject-fee": "Walks from the fee",
+  "priced-out": "Over the limit",
+  explain: "Trade-off",
   "walk-away": "Walk away",
   "accept-upsell": "Fell for the upsell",
 };
+
+/** Statuses where money is committed (held or paid). */
+export const MONEY_COMMITTED: LineStatus[] = ["authorized", "captured"];
 
 /** What the screen shows after playing steps[0..cursor). */
 export function deriveView(run: Run, steps: Step[], cursor: number): View {
@@ -179,44 +213,49 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
   let commentary: string[] = [];
   let event: string | null = null;
   let checkout: CheckoutRow[] = [];
+  let guard: GuardDecision | null = null;
   let offerIndex = 0;
+  let dealPrice: number | null = null;
   let revealFloors = false;
 
-  const startLine = (i: number) => {
-    line = i;
-    const d = run.lines[i].deal;
-    booths = d.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, out: false, won: false, messages: [] }));
-    commentary = [];
-    event = null;
-    checkout = [];
-    offerIndex = 0;
-    revealFloors = false;
-    statuses[i] = "negotiating";
-  };
+  const say = (t: string) => (commentary = [t, ...commentary].slice(0, 3));
 
   for (const step of steps.slice(0, cursor)) {
     const ln = run.lines[step.line];
     const o = ln.deal.outcome;
     switch (step.type) {
-      case "line-start":
-        startLine(step.line);
+      case "line-start": {
+        line = step.line;
+        booths = ln.deal.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open", messages: [] }));
+        commentary = [];
+        event = null;
+        checkout = [];
+        guard = null;
+        offerIndex = 0;
+        dealPrice = null;
+        revealFloors = false;
+        statuses[step.line] = "negotiating";
         break;
+      }
       case "beat": {
         const b = step.beat;
         if (b.kind === "agent") {
-          for (const id of b.to) {
-            const booth = booths.find((x) => x.id === id);
-            booth?.messages.push({ from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
-          }
+          for (const id of b.to) booths.find((x) => x.id === id)?.messages.push({ from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
           if (b.price !== undefined && (b.move === "offer" || b.move === "anchor")) {
-            offerIndex = Math.max(0, ln.deal.plan.offers.indexOf(b.price));
+            const idx = ln.deal.plan.offers.indexOf(b.price);
+            if (idx >= 0) offerIndex = idx;
+          }
+          if (b.move === "accept" || b.move === "accept-upsell") dealPrice = o.amountToPay ?? b.price ?? null;
+          if (b.move === "decline" || b.move === "priced-out" || b.move === "reject-fee") for (const id of b.to) {
+            const booth = booths.find((x) => x.id === id);
+            if (booth) booth.state = "out";
           }
         } else if (b.kind === "seller") {
           const booth = booths.find((x) => x.id === b.sellerId);
           if (booth) {
             booth.messages.push({ from: "seller", text: b.text });
-            if (b.price !== undefined && b.move !== "reveal-fee" && b.move !== "surprise-fee" && b.move !== "tactic") booth.price = b.price;
-            if (b.move === "exit") booth.out = true;
+            if (b.price !== undefined && (b.move === "counter" || b.move === "final" || b.move === "accept" || b.move === "absorb-fee")) booth.price = b.price;
+            if (b.move === "exit") booth.state = "out";
           }
         } else if (b.kind === "detect") {
           const booth = booths.find((x) => x.id === b.sellerId);
@@ -228,28 +267,26 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         } else if (b.kind === "event") {
           event = b.text;
         } else {
-          commentary = [b.text, ...commentary].slice(0, 3);
+          say(b.text);
         }
         break;
       }
       case "guard": {
+        guard = step.guard;
         statuses[step.line] = "checking";
-        if (o.sellerId) {
-          for (const booth of booths) {
-            booth.won = booth.id === o.sellerId;
-            booth.out = booth.out || booth.id !== o.sellerId;
-          }
-          const winner = booths.find((x) => x.id === o.sellerId);
-          if (winner && o.price !== undefined) winner.price = o.price;
+        const winner = booths.find((x) => x.id === o.sellerId);
+        for (const booth of booths) if (booth !== winner && booth.state === "open") booth.state = "out";
+        if (winner) {
+          winner.state = step.guard.decision === "block" ? "blocked" : "won";
+          if (o.price !== undefined) winner.price = o.price;
         }
-        const g = ln.guard!;
         checkout = [
-          ...g.checks.map((c) => ({ text: `${c.pass ? "✓" : "✗"} ${c.label}`, tone: (c.pass ? "info" : "bad") as CheckoutRow["tone"] })),
-          { text: `AgentGuard: ${g.summary}`, tone: g.decision === "approve" ? "ok" : g.decision === "ask_user" ? "ask" : "bad" },
+          ...step.guard.checks.map((c) => ({ text: `${c.pass ? "✓" : "✗"} ${c.label}`, tone: (c.pass ? "info" : "bad") as CheckoutRow["tone"] })),
+          { text: `AgentGuard: ${step.guard.summary}`, tone: step.guard.decision === "approve" ? "ok" : step.guard.decision === "ask_user" ? "ask" : "bad" },
         ];
-        if (g.decision === "block") {
+        if (step.guard.decision === "block") {
           statuses[step.line] = "blocked";
-          amounts[step.line] = o.amountToPay ?? null;
+          say(o.rogue ? "Blocked! The AI was talked into it, but the code said no. $0 spent." : "AgentGuard blocked the payment. No money moved.");
         }
         break;
       }
@@ -259,22 +296,22 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         break;
       case "decision":
         checkout.push({ text: step.decision === "approved" ? "You approved the payment." : "You declined. No money moved.", tone: step.decision === "approved" ? "ok" : "bad" });
-        if (step.decision === "declined") statuses[step.line] = "declined";
-        break;
-      case "paypal":
-        checkout.push({ text: step.text, tone: step.final ? "ok" : "info" });
-        if (step.final) {
-          statuses[step.line] = getItem(ln.itemId).paypalFlow === "capture_now" ? "paid" : "held";
-          amounts[step.line] = o.amountToPay ?? null;
+        if (step.decision === "declined") {
+          statuses[step.line] = "declined";
+          amounts[step.line] = null;
+          say("You said no. The agent keeps your money.");
         }
         break;
-      case "after-payment":
-        event = step.text;
-        checkout.push({ text: `⚡ ${step.text}`, tone: "bad" });
+      case "paypal":
+        checkout.push({ text: step.text, tone: step.effect === "voided" || step.effect === "refunded" ? "ok" : step.effect ? "ok" : "info" });
+        if (step.effect) {
+          statuses[step.line] = step.effect;
+          amounts[step.line] = step.effect === "voided" || step.effect === "refunded" ? null : o.amountToPay ?? null;
+        }
         break;
-      case "refund":
-        checkout.push({ text: step.text, tone: "ok" });
-        statuses[step.line] = "refunded";
+      case "event":
+        event = step.text;
+        checkout.push({ text: step.text, tone: "info" });
         break;
       case "line-end":
         revealFloors = true;
@@ -284,10 +321,12 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     }
   }
 
-  let spentUsd = 0;
+  let committedUsd = 0;
+  let capturedUsd = 0;
   let pendingUsd = 0;
   statuses.forEach((s, i) => {
-    if (s === "paid" || s === "held") spentUsd += amounts[i] ?? 0;
+    if (MONEY_COMMITTED.includes(s)) committedUsd += amounts[i] ?? 0;
+    if (s === "captured") capturedUsd += amounts[i] ?? 0;
     if (s === "awaiting-approval") pendingUsd += amounts[i] ?? 0;
   });
 
@@ -295,13 +334,16 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     line,
     plan: run.lines[line]?.deal.plan ?? null,
     offerIndex,
+    dealPrice,
     booths,
     commentary,
     event,
     checkout,
+    guard,
     statuses,
     amounts,
-    spentUsd,
+    committedUsd,
+    capturedUsd,
     pendingUsd,
     revealFloors,
   };
@@ -317,18 +359,16 @@ export function stepDelay(step: Step): number {
       if (b.kind === "commentary") return 250;
       if (b.kind === "detect") return 700;
       if (b.kind === "event") return 1500;
-      return Math.min(2400, 700 + b.text.length * 14);
+      return Math.min(2600, 700 + b.text.length * 13);
     }
     case "guard":
-      return 1400;
+      return 1500;
     case "paypal":
-      return 1100;
-    case "after-payment":
-      return 1600;
-    case "refund":
+      return 1200;
+    case "event":
       return 1400;
     case "line-end":
-      return 1800;
+      return 2000;
     default:
       return 600;
   }

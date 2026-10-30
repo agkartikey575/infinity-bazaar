@@ -242,6 +242,40 @@ ROWS = [
    "For when the submission goes in."),
 ]
 
+# How each item reads inside a sentence ("I'm shopping for ...").
+PHRASES = {
+    "domain-dev": "a .dev domain name", "hosting-starter": "starter web hosting",
+    "domain-hosting": "a domain and hosting bundle", "ai-credits": "AI API credits",
+    "database-plan": "a managed database plan", "email-service": "a transactional email service",
+    "uptime-monitor": "uptime monitoring", "pro-inbox": "a custom-domain email inbox",
+    "ui-template": "a UI template pack", "icon-set": "an icon set license",
+    "stock-video": "stock video clips", "font-license": "a web font license",
+    "music-track": "a background music license", "illustration-pack": "an illustration pack",
+    "deck-template": "a pitch deck template", "device-mockups": "a device mockup pack",
+    "usb-mic": "a USB microphone", "webcam": "a 1080p webcam", "ring-light": "a ring light",
+    "green-screen": "a green screen", "mic-arm": "a mic boom arm", "usb-c-hub": "a USB-C hub",
+    "headphones": "noise-cancelling headphones", "portable-monitor": "a portable monitor",
+    "laptop-stand": "a laptop stand", "video-editor": "a video editor for a 3-minute demo",
+    "logo-designer": "a logo designer", "copywriter": "a landing page copywriter",
+    "pitch-coach": "a pitch coaching session", "voiceover": "a voice-over artist",
+    "ux-review": "a UX review", "motion-intro": "an animated logo intro",
+    "qa-tester": "a QA tester for a day", "pizza": "pizza for the team",
+    "energy-drinks": "a 12-pack of energy drinks", "hoodies": "team hoodies",
+    "stickers": "die-cut stickers", "coffee": "specialty coffee beans",
+    "cowork-pass": "a coworking day pass", "cake": "a celebration cake",
+}
+
+KEEP_CASE = ("SSL", "SMS", "WHOIS", "Figma", "Keynote", "YouTube", "4K", "Devpost")
+
+def phrase(label):
+    """Label as it reads mid-sentence: no trailing 'included', lower-case first word unless a name."""
+    if label.endswith(" included"):
+        label = label[: -len(" included")]
+    if label.startswith(KEEP_CASE):
+        return label
+    return label[0].lower() + label[1:]
+
+
 def floor_range(typ, prof):
     lo, hi = prof["costShare"]
     m = prof["minMargin"]
@@ -253,6 +287,7 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
     items.append({
         "id": iid,
         "name": name,
+        "phrase": PHRASES[iid],
         "group": group,
         "unit": unit,
         "description": desc,
@@ -263,9 +298,9 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
         "seller": {"costProfile": prof, "costShare": p["costShare"], "minMargin": p["minMargin"],
                    "floorRange": floor_range(typ, p)},
         "sellerTypes": sellers,
-        "levers": [{"id": a, "label": b, "valueUsd": c} for a, b, c in levers],
+        "levers": [{"id": a, "label": phrase(b), "valueUsd": c} for a, b, c in levers],
         # payNow: charged at checkout (shipping, setup). Otherwise a later cost (renewal, limits).
-        "hiddenFees": [{"id": a, "label": b, "valueUsd": c, "payNow": a in PAY_NOW} for a, b, c in fees],
+        "hiddenFees": [{"id": a, "label": phrase(b), "valueUsd": c, "payNow": a in PAY_NOW} for a, b, c in fees],
     })
 
 catalog = {

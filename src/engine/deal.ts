@@ -2,8 +2,8 @@
 import { planBuyer } from "./buyer.ts";
 import { events as allEvents, getItem } from "./data.ts";
 import { createRng, type Rng } from "./rng.ts";
-import { effectiveCost, reply, riskAdjusted, spawnSellers, trueCost } from "./sellers.ts";
-import { commentary, say } from "./text.ts";
+import { allIn, laterFee, payNowFee, rank, reply, spawnSellers } from "./sellers.ts";
+import { join, Writer } from "./text.ts";
 import type { Beat, CatalogItem, DealOutcome, DealResult, GameEvent, Seller, SellerMemory } from "./types.ts";
 
 export interface DealOptions {
@@ -31,6 +31,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
   const item = getItem(itemId);
   const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
   const rng = createRng(seed);
+  const text = new Writer(seed, itemId);
   const maxRounds = opts.maxRounds ?? 8;
   const memory: SellerMemory = structuredClone(opts.memory ?? {});
   const rogue = opts.rogue ?? false;
@@ -40,19 +41,44 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
   const openAsks = new Map(sellers.map((s) => [s.id, s.ask]));
   const beats: Beat[] = [];
   const active = () => sellers.filter((s) => s.active);
-  const ranked = () => [...active()].sort((a, b) => riskAdjusted(a, item) - riskAdjusted(b, item));
+  const byRank = (list = active()) => [...list].sort((a, b) => rank(a, item) - rank(b, item));
+  const affordable = (s: Seller) => allIn(s) <= plan.walkAway;
+  const agreed = (s: Seller) => s.agreedAt !== null && s.agreedAt === s.ask;
   // The rogue demo is a set scene, so random events stay off there.
   const { scheduled, afterPayment } = scheduleEvents(item, sellers, rng, rogue ? { ...opts, events: false } : opts);
 
   let outcome: DealOutcome | null = null;
+  let lastOffer = plan.offers[0];
 
-  const finish = (s: Seller, price: number, round: number, isRogue = false) => {
-    const fee = s.fee && s.feeRevealed && s.fee.payNow ? s.fee.valueUsd : 0;
-    const futureFee = s.fee && s.feeRevealed && !s.fee.payNow ? s.fee.valueUsd : 0;
-    const saved = Math.round(((item.price.typical - trueCost(s, price)) / item.price.typical) * 100);
+  const comment = (round: number, t: string) => {
+    if (t) beats.push({ kind: "commentary", round, text: t });
+  };
+  const agentSay = (round: number, to: Seller[], move: Extract<Beat, { kind: "agent" }>["move"], t: string, price?: number, refPrice?: number) =>
+    beats.push({ kind: "agent", round, to: to.map((s) => s.id), move, text: t, price, refPrice });
+  const sellerSay = (round: number, s: Seller, move: Extract<Beat, { kind: "seller" }>["move"], t: string, price?: number) =>
+    beats.push({ kind: "seller", round, sellerId: s.id, move, text: t, price });
+
+  const finish = (s: Seller, round: number, isRogue = false) => {
+    const price = s.ask;
+    const fee = payNowFee(s);
+    const later = laterFee(s);
+    const total = price + fee;
+    const saved = Math.round(((item.price.typical - (total + later)) / item.price.typical) * 100);
     if (!isRogue) {
-      beats.push({ kind: "agent", round, to: [s.id], move: "accept", price, text: say.accept(rng, price) });
-      beats.push({ kind: "commentary", round, text: commentary.deal(s.name, price, saved) });
+      const line = fee ? text.agent("acceptAllIn", { price, fee, total }) : text.agent("accept", { price });
+      agentSay(round, [s], "accept", join(line, text.chance(0.6) && text.talk("close")), price);
+      const cheaper = active().filter((o) => o !== s && affordable(o) && allIn(o) < total);
+      if (cheaper.length) {
+        const extra = total - Math.min(...cheaper.map((o) => allIn(o)));
+        const why = cheaper.some((o) => laterFee(o) > laterFee(s)) ? "explainFees" : "explainReliability";
+        agentSay(round, [s], "explain", text.agent(why, { name: s.name, extra }));
+      }
+      for (const o of active()) {
+        if (o === s) continue;
+        agentSay(round, [o], "decline", text.agent("declineOthers"));
+        sellerSay(round, o, "lost", text.seller(o.archetype.id, "lost"));
+      }
+      comment(round, saved > 0 ? text.commentary("deal", { name: s.name, price: total, saved }) : text.commentary("dealFair", { name: s.name, price: total }));
     }
     outcome = {
       status: "deal",
@@ -61,70 +87,81 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       sellerName: s.name,
       price,
       fee,
-      futureFee,
-      surpriseFee: s.feeRevealed && s.usedTactics.includes("surprise-fee"),
+      futureFee: later,
+      surpriseFee: s.usedTactics.includes("surprise-fee") || undefined,
       levers: [...s.levers],
-      effectiveCost: effectiveCost(s, price),
-      amountToPay: price + fee,
+      effectiveCost: total + later,
+      amountToPay: total,
       savedVsTypical: saved,
       rogue: isRogue || undefined,
       afterPayment: afterPayment && !isRogue ? { eventId: afterPayment.id, text: afterPayment.text.replace("{seller}", s.name) } : null,
     };
   };
 
-  /** Checkout check: a fee the seller hid comes out now. Returns false if the deal falls through. */
-  const tryClose = (s: Seller, price: number, round: number): boolean => {
+  /** Checkout: a hidden fee comes out, the agent re-compares, pushes back or walks. */
+  const tryClose = (s: Seller, round: number): boolean => {
     if (s.fee && !s.feeRevealed) {
       s.feeRevealed = true;
       s.usedTactics.push("surprise-fee");
-      beats.push({ kind: "seller", round, sellerId: s.id, move: "surprise-fee", price: s.fee.valueUsd, text: say.surpriseFee(s.fee.label, s.fee.valueUsd) });
+      sellerSay(round, s, "surprise-fee", text.seller(s.archetype.id, "surpriseFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), s.fee.valueUsd);
       beats.push({ kind: "detect", round, sellerId: s.id, tactic: "hidden-fee", text: `Detected: hidden fee of $${s.fee.valueUsd}` });
-      beats.push({ kind: "commentary", round, text: commentary.surprise(s.name, s.fee.valueUsd) });
-      // Push the seller to absorb a fee charged now, if their floor allows it.
-      const absorbed = s.fee.payNow ? Math.max(s.floor, Math.min(price, plan.walkAway - s.fee.valueUsd)) : price;
-      if (trueCost(s, price) > plan.walkAway && s.fee.payNow && trueCost(s, absorbed) <= plan.walkAway) {
-        beats.push({ kind: "agent", round, to: [s.id], move: "absorb-fee", text: say.absorbAsk(s.fee.label) });
-        beats.push({ kind: "seller", round, sellerId: s.id, move: "absorb-fee", price: absorbed, text: say.absorbYes(absorbed, s.fee.valueUsd) });
-        beats.push({ kind: "commentary", round, text: commentary.absorbed(s.name) });
+      comment(round, text.commentary("surprise", { name: s.name, fee: s.fee.valueUsd }));
+    }
+    const others = active().filter((o) => o !== s && affordable(o));
+    const bestOtherRank = others.length ? Math.min(...others.map((o) => rank(o, item))) : Infinity;
+    const bestOtherAllIn = others.length ? Math.min(...others.map((o) => allIn(o))) : Infinity;
+    const fee = payNowFee(s);
+
+    // A fee charged now pushed this seller over the line or behind a rival: ask them to absorb it.
+    if (fee > 0 && (!affordable(s) || rank(s, item) > bestOtherRank)) {
+      const cap = Math.min(plan.walkAway, bestOtherAllIn - 1);
+      const absorbed = Math.max(s.floor, Math.min(s.ask, cap - fee));
+      if (absorbed + fee <= cap && absorbed < s.ask) {
+        agentSay(round, [s], "absorb-fee", text.agent("absorbAsk", { fee }));
+        sellerSay(round, s, "absorb-fee", text.seller(s.archetype.id, "absorbFee", { price: absorbed, fee, total: absorbed + fee }), absorbed);
+        comment(round, text.commentary("absorbed", { name: s.name }));
         s.ask = absorbed;
-        price = absorbed;
-      }
-      if (trueCost(s, price) > plan.walkAway) {
-        beats.push({ kind: "agent", round, to: [s.id], move: "reject-fee", text: say.rejectFee(s.fee.valueUsd) });
-        beats.push({ kind: "commentary", round, text: commentary.rejectFee(s.name) });
-        s.active = false;
-        return false;
+        s.agreedAt = absorbed;
       }
     }
-    if (trueCost(s, price) > plan.walkAway) return false;
-    finish(s, price, round);
+    if (!affordable(s)) {
+      agentSay(round, [s], "reject-fee", text.agent("rejectFee", { fee }));
+      comment(round, text.commentary("rejectFee", { name: s.name }));
+      s.active = false;
+      return false;
+    }
+    if (rank(s, item) > bestOtherRank) return false;
+    finish(s, round);
     return true;
   };
 
-  const tryCloseBest = (list: { s: Seller; price: number }[], round: number) => {
-    const sorted = list.sort((a, b) => effectiveCost(a.s, a.price) - effectiveCost(b.s, b.price));
-    for (const { s, price } of sorted) if (tryClose(s, price, round)) return;
+  const tradeForLever = (s: Seller, round: number) => {
+    s.leverAsked = true;
+    const lever = item.levers.find((l) => !s.levers.some((x) => x.id === l.id));
+    if (!lever) return;
+    agentSay(round, [s], "ask-lever", text.agent("askLever", { lever: lever.label }));
+    s.levers.push(lever);
+    beats.push({ kind: "seller", round, sellerId: s.id, move: "grant-lever", lever, text: text.seller(s.archetype.id, "grantLever", { lever: lever.label }) });
   };
 
-  const collect = (offer: number, round: number, leverageFor: (s: Seller) => number | null) => {
-    const accepted: { s: Seller; price: number }[] = [];
-    for (const s of active()) {
-      const r = reply(s, offer, { rng, item, round, leverageRef: leverageFor(s), rogue, finalOffer: offer === plan.walkAway });
-      beats.push(...r.beats);
-      for (const b of r.beats) if (b.kind === "detect") beats.push({ kind: "commentary", round, text: commentary.detect(s.name, b.tactic) });
-      if (r.matched) beats.push({ kind: "commentary", round, text: commentary.matched(s.name, s.ask) });
-      if (r.acceptedAt !== null) accepted.push({ s, price: r.acceptedAt });
+  const commentDetects = (s: Seller, from: number, round: number) => {
+    for (const b of beats.slice(from)) {
+      if (b.kind !== "detect") continue;
+      if (rogue && b.tactic === "upsell") comment(round, `Upsell attempt from ${s.name}! Will the agent bite?`);
+      else comment(round, text.detect(b.tactic, { name: s.name }));
     }
-    return accepted;
   };
 
   // Round 1: anchor with all sellers at once.
   let offerIdx = 0;
-  let offer = plan.offers[0];
-  beats.push({ kind: "agent", round: 1, to: active().map((s) => s.id), move: "anchor", price: offer, text: say.anchor(rng, item.name.toLowerCase(), item.price.low, offer) });
-  beats.push({ kind: "commentary", round: 1, text: commentary.anchor(item.price.low, offer) });
-  let accepted = collect(offer, 1, () => null);
-  if (accepted.length) tryCloseBest(accepted, 1);
+  const doubt1 = text.chance(0.5) ? text.talk("doubt") : "";
+  agentSay(1, active(), "anchor", join(text.agent("anchor", { item: item.phrase, low: item.price.low, price: plan.offers[0] }), doubt1), plan.offers[0]);
+  comment(1, text.commentary("anchor", { price: plan.offers[0], low: item.price.low }));
+  for (const s of active()) {
+    const from = beats.length;
+    reply(s, plan.offers[0], { rng, text, item, round: 1, leverageRef: null, rogue, finalOffer: false, doubted: Boolean(doubt1) }).beats.forEach((b) => beats.push(b));
+    commentDetects(s, from, 1);
+  }
 
   for (let round = 2; round <= maxRounds && !outcome; round++) {
     for (const ev of scheduled.filter((x) => x.round === round)) applyEvent(ev.event, round);
@@ -132,66 +169,94 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     // Rogue demo: the agent falls for the upsell pitched in round 1.
     const upseller = rogue ? active().find((s) => s.upsellPrice) : undefined;
     if (upseller?.upsellPrice) {
-      beats.push({ kind: "agent", round, to: [upseller.id], move: "accept-upsell", price: upseller.upsellPrice, text: say.acceptUpsell(upseller.upsellPrice) });
-      beats.push({ kind: "commentary", round, text: commentary.rogue() });
-      finish(upseller, upseller.upsellPrice, round, true);
+      upseller.ask = upseller.upsellPrice;
+      agentSay(round, [upseller], "accept-upsell", text.agent("acceptUpsell", { price: upseller.upsellPrice }), upseller.upsellPrice);
+      comment(round, text.commentary("rogue"));
+      finish(upseller, round, true);
       break;
     }
 
     // Round 2: ask everyone about extra fees before comparing prices. Some sellers lie.
     if (round === 2 && active().length) {
-      beats.push({ kind: "agent", round, to: active().map((s) => s.id), move: "ask-fees", text: say.askFees() });
+      agentSay(round, active(), "ask-fees", text.agent("askFees"));
       for (const s of active()) {
+        const a = s.archetype.id;
         if (s.fee && !s.feeRevealed && rng.chance(HONEST_ABOUT_FEES)) {
           s.feeRevealed = true;
-          beats.push({ kind: "seller", round, sellerId: s.id, move: "reveal-fee", price: s.fee.valueUsd, text: say.revealFee(s.fee.label, s.fee.valueUsd) });
+          sellerSay(round, s, "reveal-fee", text.seller(a, "revealFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), s.fee.valueUsd);
           beats.push({ kind: "detect", round, sellerId: s.id, tactic: "hidden-fee", text: `Detected: hidden fee of $${s.fee.valueUsd}` });
-          beats.push({ kind: "commentary", round, text: commentary.detect(s.name, "hidden-fee") });
-        } else if (s.fee && !s.feeRevealed) {
-          beats.push({ kind: "seller", round, sellerId: s.id, move: "no-fee", text: say.lieNoFee() });
+          comment(round, text.detect("hidden-fee", { name: s.name }));
         } else {
-          beats.push({ kind: "seller", round, sellerId: s.id, move: "no-fee", text: say.noFee() });
+          sellerSay(round, s, "no-fee", text.seller(a, s.fee && !s.feeRevealed ? "lieNoFee" : "noFee"));
         }
       }
     }
 
-    const best = ranked()[0];
-    if (!best) break;
-    const nextOffer = plan.offers[offerIdx + 1];
+    // Sellers whose final all-in price is over the line are thanked and dropped.
+    for (const s of active()) {
+      if (s.final && !affordable(s)) {
+        agentSay(round, [s], "priced-out", text.agent("pricedOut"));
+        s.active = false;
+      }
+    }
+    if (!active().length) break;
+
+    const ranked = byRank();
+    const best = ranked[0];
+    const nextLadder = plan.offers[offerIdx + 1];
+    const ladderDone = nextLadder === undefined;
 
     // Close when the best seller fits the walk-away price and won't move further.
-    if (trueCost(best) <= plan.walkAway && (best.final || nextOffer === undefined || best.ask <= nextOffer)) {
-      if (best.final && best.ask > offer && !best.leverAsked) tradeForLever(best, round);
-      if (tryClose(best, best.ask, round)) break;
+    if (affordable(best) && (agreed(best) || best.final || ladderDone || best.ask <= nextLadder - payNowFee(best))) {
+      if (best.final && !agreed(best) && !best.leverAsked && best.ask > lastOffer) tradeForLever(best, round);
+      if (tryClose(best, round)) break;
       continue;
     }
-    if (nextOffer === undefined) break;
+    if (ladderDone) break;
 
     offerIdx++;
-    offer = nextOffer;
-    const others = ranked().slice(1);
+    const ladder = plan.offers[offerIdx];
     const last = offerIdx === plan.offers.length - 1;
-    beats.push({ kind: "agent", round, to: [best.id], move: "offer", price: offer, text: last ? say.finalOffer(offer) : say.offer(rng, offer) });
-    if (others.length) {
-      beats.push({ kind: "agent", round, to: others.map((s) => s.id), move: "leverage", price: offer, refPrice: best.ask, text: say.leverage(rng, best.ask, offer) });
-      beats.push({ kind: "commentary", round, text: commentary.leverage(others.map((s) => s.name).join(" and ")) });
+    const ref = affordable(best) ? allIn(best) : null;
+    let leveraged = false;
+
+    for (const s of ranked) {
+      if (agreed(s)) continue; // already said yes; on hold while the agent checks the others
+      const isBest = s === best || ref === null;
+      let cash = ladder - payNowFee(s);
+      if (!isBest) cash = Math.min(cash, ref! - payNowFee(s) - 1);
+      if (cash < 1) continue;
+      cash = Math.min(cash, s.ask);
+      if (isBest) lastOffer = cash;
+      const doubted = text.chance(0.35);
+      const fee = payNowFee(s);
+      const line = isBest
+        ? fee
+          ? text.agent("offerAllIn", { price: cash, fee, total: cash + fee })
+          : text.agent(last ? "finalOffer" : "offer", { price: cash })
+        : text.agent(fee ? "leverageAllIn" : "leverage", { ref: ref!, price: cash, fee });
+      agentSay(round, [s], isBest ? "offer" : "leverage", join(line, doubted && text.talk("doubt")), cash, isBest ? undefined : ref!);
+      if (!isBest) leveraged = true;
+      const from = beats.length;
+      const r = reply(s, cash, { rng, text, item, round, leverageRef: isBest ? null : ref, rogue, finalOffer: last, doubted });
+      r.beats.forEach((b) => beats.push(b));
+      commentDetects(s, from, round);
+      if (r.matched) comment(round, text.commentary("matched", { name: s.name, price: s.ask }));
     }
-    accepted = collect(offer, round, (s) => (s === best ? null : best.ask));
-    if (accepted.length) tryCloseBest(accepted, round);
+    if (leveraged) comment(round, text.commentary("leverage", { name: ranked.slice(1).map((s) => s.name).join(" and ") }));
   }
 
-  // Out of rounds: take the best offer if it fits, otherwise walk away.
+  // Out of rounds: take the best affordable offer, otherwise walk away.
   if (!outcome) {
     const lastRound = Math.min(maxRounds, beats.reduce((m, b) => Math.max(m, b.round), 1));
-    let closed = false;
-    for (const s of ranked()) {
-      if (trueCost(s) > plan.walkAway) continue;
-      if (!s.leverAsked) tradeForLever(s, lastRound);
-      if ((closed = tryClose(s, s.ask, lastRound))) break;
+    for (const s of byRank(active().filter(affordable))) {
+      if (!s.leverAsked && !agreed(s) && s.ask > lastOffer) tradeForLever(s, lastRound);
+      if (tryClose(s, lastRound)) break;
     }
-    if (!closed) {
-      beats.push({ kind: "agent", round: lastRound, to: active().map((s) => s.id), move: "walk-away", text: say.walkAway(plan.walkAway) });
-      beats.push({ kind: "commentary", round: lastRound, text: commentary.walkAway() });
+    if (!outcome) {
+      if (active().length) agentSay(lastRound, active(), "walk-away", text.agent("walkAway", { walk: plan.walkAway }));
+      else comment(lastRound, text.commentary("allLeft"));
+      comment(lastRound, text.commentary("walkAway"));
       outcome = { status: "walk-away", rounds: lastRound, fee: 0, futureFee: 0, levers: [], afterPayment: null };
     }
   }
@@ -214,31 +279,25 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     memory,
   };
 
-  function tradeForLever(s: Seller, round: number) {
-    s.leverAsked = true;
-    const lever = item.levers.find((l) => !s.levers.some((x) => x.id === l.id));
-    if (!lever) return;
-    beats.push({ kind: "agent", round, to: [s.id], move: "ask-lever", text: say.askLever(lever.label) });
-    s.levers.push(lever);
-    beats.push({ kind: "seller", round, sellerId: s.id, move: "grant-lever", lever, text: say.grantLever(lever.label) });
-  }
-
   function applyEvent(event: GameEvent, round: number) {
     const fx = event.effect;
     let eligible = active().filter((s) => !event.appliesTo || event.appliesTo.includes(s.archetype.id));
     if (fx.type === "reveal-hidden-fee") eligible = eligible.filter((s) => s.fee && !s.feeRevealed);
+    if (fx.type === "add-free-lever") eligible = eligible.filter((s) => item.levers.some((l) => !s.levers.some((x) => x.id === l.id)));
     if (!eligible.length) return;
     const s = rng.pick(eligible);
-    const text = event.text.replace("{seller}", s.name);
-    beats.push({ kind: "event", round, eventId: event.id, sellerId: s.id, text });
-    beats.push({ kind: "commentary", round, text: commentary.event(text) });
+    const a = s.archetype.id;
+    const evText = event.text.replace("{seller}", s.name);
+    beats.push({ kind: "event", round, eventId: event.id, sellerId: s.id, text: evText });
+    comment(round, text.commentary("event", { text: evText }));
     switch (fx.type) {
       case "temporary-floor-drop": {
         const drop = Number(fx.dropShare ?? 0.08);
         s.floor = Math.round(s.floor * (1 - drop));
         s.ask = Math.max(s.floor, Math.round(s.ask * (1 - drop)));
         s.final = false;
-        beats.push({ kind: "seller", round, sellerId: s.id, move: "counter", price: s.ask, text: say.counter(rng, s.ask) });
+        s.agreedAt = null;
+        sellerSay(round, s, "counter", text.seller(a, "counter", { price: s.ask }), s.ask);
         break;
       }
       case "concession-boost":
@@ -246,17 +305,17 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
         break;
       case "seller-exits":
         s.active = false;
-        beats.push({ kind: "seller", round, sellerId: s.id, move: "exit", text: say.exit() });
+        sellerSay(round, s, "exit", text.seller(a, "exit"));
         break;
       case "bluff":
         beats.push({ kind: "detect", round, sellerId: s.id, tactic: "phantom-buyer", text: "Detected: invented rival buyer" });
         break;
       case "match-best-offer": {
-        const lowest = Math.min(...active().filter((x) => x !== s).map((x) => x.ask));
+        const lowest = Math.min(...active().filter((x) => x !== s).map((x) => allIn(x) - payNowFee(s)));
         if (Number.isFinite(lowest) && lowest < s.ask) {
           s.ask = Math.max(s.floor, lowest);
           s.final = s.ask <= s.floor;
-          beats.push({ kind: "seller", round, sellerId: s.id, move: "counter", price: s.ask, text: say.counter(rng, s.ask) });
+          sellerSay(round, s, "counter", text.seller(a, "counter", { price: s.ask }), s.ask);
         }
         break;
       }
@@ -270,11 +329,9 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
         s.reliability = Math.max(0.3, s.reliability - Number(fx.drop ?? 0.2));
         break;
       case "add-free-lever": {
-        const lever = item.levers.find((l) => !s.levers.some((x) => x.id === l.id));
-        if (lever) {
-          s.levers.push(lever);
-          beats.push({ kind: "seller", round, sellerId: s.id, move: "grant-lever", lever, text: say.grantLever(lever.label) });
-        }
+        const lever = item.levers.find((l) => !s.levers.some((x) => x.id === l.id))!;
+        s.levers.push(lever);
+        beats.push({ kind: "seller", round, sellerId: s.id, move: "grant-lever", lever, text: text.seller(a, "grantLever", { lever: lever.label }) });
         break;
       }
     }
