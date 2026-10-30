@@ -77,6 +77,11 @@ test("AgentGuard decisions", () => {
   assert.equal(pay(20, 0, { rules: { ...rules, blockedSellerIds: ["s1"] } }), "block");
   assert.equal(pay(20, 0, { group: "fun", rules: { ...rules, allowedGroups: ["gear"] } }), "block");
   assert.equal(pay(50, 200, { rules: { ...rules, reserveUsd: 60 } }), "ask_user");
+  assert.equal(pay(19.99), "approve", "valid cents");
+  assert.equal(pay(0.29), "approve");
+  assert.equal(pay(20, 0, { surpriseFee: true }), "ask_user");
+  assert.equal(pay(20, 0, { laterFee: 25 }), "ask_user");
+  assert.equal(pay(20, 0, { agreedAmount: 19 }), "block", "amount must match the agreed price");
 });
 
 test("missions never spend more than the budget", () => {

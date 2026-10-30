@@ -87,7 +87,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     if (s.fee.kind === "conditional") agentSay(round, [s], "note-term", text.agent("noteTerm", { feeLabel: s.fee.label }));
   };
 
-  const finish = (s: Seller, round: number, opt: { rogue?: boolean; explained?: boolean } = {}) => {
+  const finish = (s: Seller, round: number, opt: { rogue?: boolean; explained?: boolean; kept?: boolean } = {}) => {
     const price = s.ask;
     const fee = payNowFee(s);
     const later = laterFee(s);
@@ -100,7 +100,8 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       if (cheaper.length && !opt.explained) {
         const cheapest = cheaper.reduce((m, o) => (allIn(o) < allIn(m) ? o : m));
         const extra = total - allIn(cheapest);
-        const why = laterFee(cheapest) > laterFee(s) ? "explainFees" : "explainReliability";
+        // A seller who already said yes keeps the deal; otherwise say what the extra buys.
+        const why = opt.kept ? "explainCommitted" : laterFee(cheapest) > laterFee(s) ? "explainFees" : "explainReliability";
         agentSay(round, [s], "explain", text.agent(why, { name: s.name, extra }));
       }
       for (const o of active()) {
@@ -145,7 +146,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       if (absorbed + fee <= target && absorbed < s.ask) {
         const before = s.ask;
         const full = absorbed + fee <= (s.agreedAt ?? before);
-        agentSay(round, [s], "absorb-fee", text.agent("absorbAsk", { fee }));
+        agentSay(round, [s], "absorb-fee", text.agent(surprised ? "absorbAsk" : "absorbKnownAsk", { fee }));
         sellerSay(round, s, "absorb-fee", full
           ? text.seller(s.archetype.id, "absorbFee", { price: absorbed, fee, total: absorbed + fee })
           : text.seller(s.archetype.id, "partialAbsorb", { cut: before - absorbed, price: absorbed, fee, total: absorbed + fee }), absorbed);
@@ -156,7 +157,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     }
     if (!affordable(s)) {
       const later = laterFee(s);
-      agentSay(round, [s], "reject-fee", later && allIn(s) <= limit ? text.agent("rejectLaterFee", { fee: later }) : text.agent("rejectFee", { fee }));
+      agentSay(round, [s], "reject-fee", later && allIn(s) <= limit ? text.agent("rejectLaterFee", { fee: later }) : text.agent(surprised ? "rejectFee" : "rejectKnownFee", { fee }));
       comment(round, text.commentary("rejectFee", { name: s.name }));
       s.active = false;
       return false;
@@ -168,7 +169,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       s.active = false;
       return false;
     }
-    finish(s, round, { explained });
+    finish(s, round, { explained, kept: committed(s) });
     return true;
   };
 
@@ -261,14 +262,18 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     const ladder = plan.offers[offerIdx];
     const last = offerIdx === plan.offers.length - 1;
 
-    // 1. Quote requests to the others, quoting the best all-in price on the table.
-    const ref = allIn(best);
+    // 1. Quote requests to the others, citing the cheapest rival all-in price
+    //    only when it really is below their own.
     const others = byRank().slice(1);
     for (const s of others) {
       const fee = payNowFee(s);
-      agentSay(round, [s], "quote-request", text.agent(fee ? "quoteRequestAllIn" : "quoteRequest", { ref, fee }), undefined, ref);
+      const rivals = active().filter((o) => o !== s).map((o) => allIn(o));
+      const ref = rivals.length ? Math.min(...rivals) : Infinity;
+      const cite = ref < allIn(s);
+      const line = cite ? text.agent(fee ? "quoteRequestAllIn" : "quoteRequest", { ref, fee }) : text.agent("quoteRequestPlain");
+      agentSay(round, [s], "quote-request", line, undefined, cite ? ref : undefined);
       const from = beats.length;
-      const r = reply(s, null, { rng, text, item, round, leverageRef: ref, rogue, finalOffer: false, doubted: false, anchorHint: ladder });
+      const r = reply(s, null, { rng, text, item, round, leverageRef: cite ? ref : null, rogue, finalOffer: false, doubted: false, anchorHint: ladder });
       r.beats.forEach((b) => beats.push(b));
       commentDetects(s, from, round);
       if (r.matched) comment(round, text.commentary("matched", { name: s.name, price: s.ask }));
@@ -282,9 +287,11 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     if (cash < 1) continue;
     lastOffer = cash;
     const doubted = text.chance(0.35);
-    const moved = cash > (offeredTo.get(target.id) ?? -1);
-    offeredTo.set(target.id, cash);
-    const line = !moved
+    const prev = offeredTo.get(target.id);
+    offeredTo.set(target.id, cash + fee);
+    const line = prev !== undefined && cash + fee < prev
+      ? text.agent("acceptQuote", { price: cash })
+      : prev !== undefined && cash + fee === prev
       ? text.agent(fee ? "holdOfferAllIn" : "holdOffer", { price: cash, fee, total: cash + fee })
       : fee
         ? text.agent("offerAllIn", { price: cash, fee, total: cash + fee })
@@ -309,8 +316,13 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       limit = plan.stretch;
       const stretched = byRank(active().filter(affordable)).find((s) => allIn(s) > plan.walkAway);
       const pick = within[0];
+      const vars = stretched && { name: stretched.name, walk: plan.walkAway, price: allIn(stretched), extra: allIn(stretched) - plan.walkAway };
       if (stretched && pick && trueCost(stretched) < trueCost(pick)) {
-        agentSay(lastRound, [stretched], "explain", text.agent("stretch", { name: stretched.name, walk: plan.walkAway, price: allIn(stretched), extra: allIn(stretched) - plan.walkAway }));
+        agentSay(lastRound, [stretched], "explain", text.agent("stretch", vars!));
+        if (!tryClose(stretched, lastRound, true)) limit = plan.walkAway;
+      } else if (stretched && !pick && stretched.final && !laterFee(stretched)) {
+        // Nothing fits the limit, but a final price a few dollars over beats walking away.
+        agentSay(lastRound, [stretched], "explain", text.agent("stretchRescue", vars!));
         if (!tryClose(stretched, lastRound, true)) limit = plan.walkAway;
       } else {
         limit = plan.walkAway;
@@ -386,6 +398,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       case "match-best-offer":
         s.ask = Math.max(s.floor, lowestRival(s));
         s.final = s.ask <= s.floor;
+        if (s.agreedAt !== null) s.agreedAt = s.ask;
         sellerSay(round, s, "counter", text.seller(a, "counter", { price: s.ask }), s.ask);
         break;
       case "reveal-hidden-fee":
