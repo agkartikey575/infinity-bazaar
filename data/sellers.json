@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "note": "Seller archetypes. Each run picks 3 archetypes from an item's sellerTypes, then draws a name, a hidden floor inside the item's floorRange (moved by floorBias) and an opening price.",
+  "archetypes": [
+    {
+      "id": "stubborn-veteran",
+      "label": "Stubborn veteran",
+      "names": ["Grandpa Rao", "Old Man Ferris", "Auntie Meera"],
+      "voice": "Proud, story-telling, slow to move. Gets offended if rushed.",
+      "openMarkup": [1.25, 1.4],
+      "concession": "slow",
+      "floorBias": 0.75,
+      "tactics": ["appeal-to-quality", "take-it-or-leave-it"],
+      "softSpots": ["patience", "respect", "repeat-customer"],
+      "reliability": 0.95
+    },
+    {
+      "id": "desperate-startup",
+      "label": "Desperate startup",
+      "names": ["Byte the Bot", "TinyStack", "LaunchPad Lou"],
+      "voice": "Upbeat, eager, needs revenue this week. Drops price fast but may hide fees.",
+      "openMarkup": [1.0, 1.15],
+      "concession": "fast",
+      "floorBias": 0.2,
+      "tactics": ["bundle-sweetener", "hidden-fee"],
+      "softSpots": ["close-today", "testimonial", "bulk"],
+      "reliability": 0.8
+    },
+    {
+      "id": "upseller",
+      "label": "High-pressure upseller",
+      "names": ["Madame Vex", "Slick Sato", "Duchess Diamante"],
+      "voice": "Flattering and theatrical. Pushes premium bundles and fake deadlines.",
+      "openMarkup": [1.2, 1.5],
+      "concession": "medium",
+      "floorBias": 0.5,
+      "tactics": ["false-urgency", "upsell", "phantom-buyer"],
+      "softSpots": ["walk-away", "competitor-offer"],
+      "reliability": 0.9
+    },
+    {
+      "id": "big-brand",
+      "label": "Big brand",
+      "names": ["NimbusHost", "MegaMart", "Corvex"],
+      "voice": "Polite, scripted, rarely cuts price but adds perks.",
+      "openMarkup": [1.05, 1.2],
+      "concession": "slow",
+      "floorBias": 0.85,
+      "tactics": ["policy-wall", "perk-instead-of-discount"],
+      "softSpots": ["perks", "annual-commitment"],
+      "reliability": 0.99
+    },
+    {
+      "id": "reseller",
+      "label": "Reseller",
+      "names": ["DomainDen", "ResellRocket", "BargainBin Bo"],
+      "voice": "Cheap headline price, fine print elsewhere.",
+      "openMarkup": [0.85, 1.0],
+      "concession": "medium",
+      "floorBias": 0.3,
+      "tactics": ["hidden-fee", "teaser-price"],
+      "softSpots": ["fee-transparency", "competitor-offer"],
+      "reliability": 0.85
+    },
+    {
+      "id": "pro-freelancer",
+      "label": "Pro freelancer",
+      "names": ["Priya", "Marcus", "Ines"],
+      "voice": "Confident, quality-focused, booked solid. Negotiates scope, not price.",
+      "openMarkup": [1.3, 1.6],
+      "concession": "slow",
+      "floorBias": 0.9,
+      "tactics": ["scarcity-of-time", "scope-trade"],
+      "softSpots": ["flexible-deadline", "portfolio-credit"],
+      "reliability": 0.98
+    },
+    {
+      "id": "volume-studio",
+      "label": "Volume studio",
+      "names": ["QuickCut Studio", "PixelForge", "Studio Nine"],
+      "voice": "Businesslike, package-based. Will move inside its packages.",
+      "openMarkup": [1.05, 1.2],
+      "concession": "medium",
+      "floorBias": 0.55,
+      "tactics": ["package-anchor", "add-on-upsell"],
+      "softSpots": ["book-today", "competitor-offer"],
+      "reliability": 0.92
+    },
+    {
+      "id": "student-freelancer",
+      "label": "Student freelancer",
+      "names": ["Leo", "Aisha", "Tom"],
+      "voice": "Friendly and cheap. Busy with exams, may miss deadlines.",
+      "openMarkup": [0.6, 0.8],
+      "concession": "fast",
+      "floorBias": 0.1,
+      "tactics": ["overpromise"],
+      "softSpots": ["portfolio-credit", "clear-brief"],
+      "reliability": 0.7
+    },
+    {
+      "id": "friendly-local",
+      "label": "Friendly local shop",
+      "names": ["Mama Lucia's", "Corner Cafe", "Sunny's"],
+      "voice": "Warm and chatty. Prefers freebies over discounts.",
+      "openMarkup": [1.0, 1.15],
+      "concession": "medium",
+      "floorBias": 0.5,
+      "tactics": ["freebie-instead-of-discount"],
+      "softSpots": ["regular-customer", "kind-words"],
+      "reliability": 0.93
+    },
+    {
+      "id": "bulk-merch",
+      "label": "Bulk merch printer",
+      "names": ["PrintPal", "InkCrate", "TeeTitan"],
+      "voice": "Thinks in quantity tiers and setup fees.",
+      "openMarkup": [1.1, 1.3],
+      "concession": "medium",
+      "floorBias": 0.45,
+      "tactics": ["tier-pricing", "hidden-fee"],
+      "softSpots": ["bulk", "flexible-deadline"],
+      "reliability": 0.9
+    }
+  ],
+  "tactics": {
+    "appeal-to-quality": "Justifies a high price with craftsmanship or reputation.",
+    "take-it-or-leave-it": "Claims the price is final while still having room.",
+    "bundle-sweetener": "Adds a small extra instead of cutting price.",
+    "hidden-fee": "Leaves out a fee that appears later (shipping, setup, renewal).",
+    "false-urgency": "Invents a deadline or tiny stock to rush the buyer.",
+    "upsell": "Steers the buyer to a pricier version or bundle.",
+    "phantom-buyer": "Claims another buyer is waiting.",
+    "policy-wall": "Says discounts are against company policy.",
+    "perk-instead-of-discount": "Offers perks rather than a lower price.",
+    "teaser-price": "Low first-period price with a high renewal.",
+    "scarcity-of-time": "Says their calendar is nearly full.",
+    "scope-trade": "Offers less scope for a lower price.",
+    "package-anchor": "Anchors on a fixed package price.",
+    "add-on-upsell": "Adds paid extras after agreeing on a base price.",
+    "overpromise": "Promises a delivery date they may miss.",
+    "freebie-instead-of-discount": "Gives free extras rather than lowering price.",
+    "tier-pricing": "Quotes cheaper unit prices at higher quantities."
+  },
+  "detectable": ["false-urgency", "phantom-buyer", "hidden-fee", "teaser-price", "overpromise", "upsell"],
+  "concessionSpeed": {
+    "slow": [0.02, 0.05],
+    "medium": [0.04, 0.08],
+    "fast": [0.07, 0.14]
+  }
+}

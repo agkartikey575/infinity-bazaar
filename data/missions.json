@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "missions": [
+    {
+      "id": "hackathon-10-days",
+      "title": "PayPal AI Hackathon in 10 days",
+      "goal": "I'm entering the PayPal AI Hackathon in 10 days. Budget $300. Get me what I need for a great demo.",
+      "budgetUsd": 300,
+      "askAboveUsd": 100,
+      "allowedGroups": ["online", "design", "gear", "freelancers", "fun"],
+      "suggested": [
+        {"item": "usb-mic", "priority": "core", "itemCapUsd": 70},
+        {"item": "video-editor", "priority": "core", "itemCapUsd": 130},
+        {"item": "domain-hosting", "priority": "core", "itemCapUsd": 50},
+        {"item": "ui-template", "priority": "nice", "itemCapUsd": 40},
+        {"item": "pizza", "priority": "nice", "itemCapUsd": 60}
+      ],
+      "reserveShare": 0.2
+    },
+    {
+      "id": "launch-week",
+      "title": "Launch week for a side project",
+      "goal": "We launch on Product Hunt next week. Budget $500. Make it look professional.",
+      "budgetUsd": 500,
+      "askAboveUsd": 150,
+      "allowedGroups": ["online", "design", "freelancers"],
+      "suggested": [
+        {"item": "logo-designer", "priority": "core", "itemCapUsd": 150},
+        {"item": "copywriter", "priority": "core", "itemCapUsd": 150},
+        {"item": "pro-inbox", "priority": "core", "itemCapUsd": 40},
+        {"item": "motion-intro", "priority": "nice", "itemCapUsd": 100}
+      ],
+      "reserveShare": 0.15
+    },
+    {
+      "id": "home-studio",
+      "title": "Home recording setup",
+      "goal": "Set me up to record clean videos at home. Budget $200.",
+      "budgetUsd": 200,
+      "askAboveUsd": 80,
+      "allowedGroups": ["gear"],
+      "suggested": [
+        {"item": "usb-mic", "priority": "core", "itemCapUsd": 70},
+        {"item": "webcam", "priority": "core", "itemCapUsd": 65},
+        {"item": "ring-light", "priority": "core", "itemCapUsd": 40},
+        {"item": "mic-arm", "priority": "nice", "itemCapUsd": 30}
+      ],
+      "reserveShare": 0.1
+    }
+  ]
+}

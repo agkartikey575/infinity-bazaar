@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "note": "Random events. Each deal draws 0 to 2 events; weight sets how often each appears. 'effect' tells the engine what changes.",
+  "events": [
+    {
+      "id": "flash-sale",
+      "label": "Flash sale",
+      "text": "{seller} starts a flash sale: 60 seconds to accept a lower price.",
+      "weight": 3,
+      "effect": {"type": "temporary-floor-drop", "dropShare": 0.08, "seconds": 60}
+    },
+    {
+      "id": "cash-crunch",
+      "label": "Cash crunch",
+      "text": "{seller} needs cash before Friday.",
+      "weight": 3,
+      "appliesTo": ["desperate-startup", "student-freelancer", "reseller"],
+      "effect": {"type": "concession-boost", "multiplier": 1.6}
+    },
+    {
+      "id": "stock-out",
+      "label": "Stock-out",
+      "text": "{seller} just sold their last unit.",
+      "weight": 2,
+      "appliesToDelivery": ["shipped"],
+      "effect": {"type": "seller-exits"}
+    },
+    {
+      "id": "phantom-buyer",
+      "label": "Rival buyer",
+      "text": "{seller} claims another buyer is about to pay more.",
+      "weight": 3,
+      "effect": {"type": "bluff", "truthChance": 0.2}
+    },
+    {
+      "id": "price-match",
+      "label": "Price match",
+      "text": "{seller} offers to match any lower quote you can show.",
+      "weight": 2,
+      "effect": {"type": "match-best-offer"}
+    },
+    {
+      "id": "hidden-fee-reveal",
+      "label": "Fine print",
+      "text": "The fine print at {seller} reveals an extra fee.",
+      "weight": 2,
+      "effect": {"type": "reveal-hidden-fee"}
+    },
+    {
+      "id": "late-history",
+      "label": "Bad reviews",
+      "text": "{seller}'s reviews show recent late deliveries.",
+      "weight": 2,
+      "appliesToDelivery": ["service", "shipped"],
+      "effect": {"type": "reliability-drop", "drop": 0.2}
+    },
+    {
+      "id": "delivery-failure",
+      "label": "Delivery failed",
+      "text": "{seller} failed to deliver. Refund triggered.",
+      "weight": 1,
+      "afterPayment": true,
+      "effect": {"type": "refund-and-retry"}
+    },
+    {
+      "id": "goes-offline",
+      "label": "Seller offline",
+      "text": "{seller} went offline for the rest of the round.",
+      "weight": 1,
+      "effect": {"type": "seller-exits"}
+    },
+    {
+      "id": "bonus-gift",
+      "label": "Bonus gift",
+      "text": "{seller} adds a free extra to win the deal.",
+      "weight": 2,
+      "effect": {"type": "add-free-lever"}
+    }
+  ]
+}
