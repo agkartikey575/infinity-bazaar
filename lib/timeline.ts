@@ -181,6 +181,8 @@ export interface BoothView {
 export interface CheckoutRow {
   text: string;
   tone: "info" | "ok" | "ask" | "bad";
+  /** Rows from simulated PayPal steps, replaced by real calls in live mode. */
+  source?: "paypal";
 }
 
 export interface View {
@@ -316,7 +318,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         }
         break;
       case "paypal":
-        checkout.push({ text: step.text, tone: step.effect ? "ok" : "info" });
+        checkout.push({ text: step.text, tone: step.effect ? "ok" : "info", source: "paypal" });
         if (step.effect) {
           statuses[step.line] = step.effect;
           amounts[step.line] = step.effect === "voided" ? null : o.amountToPay ?? null;
