@@ -1,7 +1,7 @@
 // Turns engine results into a step-by-step timeline the deal room plays back,
 // and works out what the screen shows at any point in that timeline.
 // AgentGuard runs here at playback time against a live ledger, so declines,
-// voids and refunds free money for the lines that follow.
+// voids free money for the lines that follow.
 import { capFor, checkPayment, createRng, getItem, getMission, missionRules, runDeal, runMission } from "../src/engine/index.ts";
 import type { Beat, BuyerPlan, DealResult, GuardDecision, GuardRules } from "../src/engine/index.ts";
 
@@ -49,7 +49,7 @@ export function buildSingleRun(itemId: string, seed: number, rogue = false): Run
     kind: rogue ? "rogue" : "single",
     title: rogue ? "Rogue agent demo" : item.name,
     goal: rogue
-      ? `Get me the best possible ${item.name.toLowerCase()}. Cap $${cap}, ask me above $${SINGLE_RULES.askAboveUsd}.`
+      ? `Get me the best possible ${item.phrase.replace(/^an? /, "")}. Cap $${cap}, ask me above $${SINGLE_RULES.askAboveUsd}.`
       : `Buy ${item.phrase} (${item.unit}) at a good price.`,
     ...SINGLE_RULES,
     seed,
@@ -65,7 +65,7 @@ export type Step =
   | { type: "guard"; line: number; guard: GuardDecision }
   | { type: "approval"; line: number }
   | { type: "decision"; line: number; decision: Decision }
-  | { type: "paypal"; line: number; text: string; effect?: "authorized" | "captured" | "voided" | "refunded" }
+  | { type: "paypal"; line: number; text: string; effect?: "authorized" | "captured" | "voided" }
   | { type: "event"; line: number; text: string }
   | { type: "line-end"; line: number };
 
@@ -85,6 +85,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 export function buildSteps(run: Run, decisions: Record<number, Decision>): { steps: Step[]; waitingFor: number | null } {
   const steps: Step[] = [];
   let committed = 0;
+  const paidLines = new Set<number>();
 
   for (let i = 0; i < run.lines.length; i++) {
     const line = run.lines[i];
@@ -97,10 +98,15 @@ export function buildSteps(run: Run, decisions: Record<number, Decision>): { ste
       const amount = o.amountToPay;
       const guard = checkPayment({
         amount,
+        currency: "USD",
         spentSoFar: committed,
-        sellerId: o.sellerId,
+        sellerId: o.sellerName ?? o.sellerId,
         sellerName: o.sellerName ?? "",
         group: item.group,
+        alreadyPaid: paidLines.has(i),
+        agreedAmount: (o.price ?? 0) + o.fee,
+        surpriseFee: o.surpriseFee,
+        laterFee: o.futureFee,
         rules: line.rules,
       });
       steps.push({ type: "guard", line: i, guard });
@@ -119,13 +125,21 @@ export function buildSteps(run: Run, decisions: Record<number, Decision>): { ste
       if (pay) {
         const orderId = paypalId(run.seed, i, 1);
         const txId = paypalId(run.seed, i, 2);
-        const source = viaPopup ? "payment_source: paypal (you approved in PayPal)" : "payment_source: vaulted PayPal";
-        if (viaPopup) steps.push({ type: "paypal", line: i, text: `PayPal approval: you approved order ${orderId}` });
+        const intent = item.paypalFlow === "capture_now" ? "CAPTURE" : "AUTHORIZE";
+        paidLines.add(i);
+        if (viaPopup) {
+          // Buyer present: create the order, you approve it in PayPal, then the server captures or authorizes.
+          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} → order ${orderId} PAYER_ACTION_REQUIRED` });
+          steps.push({ type: "paypal", line: i, text: `You approved order ${orderId} in the PayPal window` });
+        }
+        const call = viaPopup
+          ? `POST /v2/checkout/orders/${orderId}/${intent === "CAPTURE" ? "capture" : "authorize"}`
+          : `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} · vaulted PayPal (agent pays, no human present)`;
         if (item.paypalFlow === "capture_now") {
-          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent CAPTURE · ${money(amount)} · ${source} → COMPLETED · capture ${txId}`, effect: "captured" });
+          steps.push({ type: "paypal", line: i, text: `${call} → COMPLETED · capture ${txId}`, effect: "captured" });
           committed += amount;
         } else {
-          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent AUTHORIZE · ${money(amount)} · ${source} → authorization ${txId} CREATED (money held)`, effect: "authorized" });
+          steps.push({ type: "paypal", line: i, text: `${call} → authorization ${txId} CREATED · money held until delivery`, effect: "authorized" });
           committed += amount;
           if (o.afterPayment) {
             steps.push({ type: "event", line: i, text: o.afterPayment.text });
@@ -153,8 +167,7 @@ export type LineStatus =
   | "declined"
   | "blocked"
   | "no-deal"
-  | "voided"
-  | "refunded";
+  | "voided";
 
 export interface BoothView {
   id: string;
@@ -245,7 +258,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
             const idx = ln.deal.plan.offers.indexOf(b.price);
             if (idx >= 0) offerIndex = idx;
           }
-          if (b.move === "accept" || b.move === "accept-upsell") dealPrice = o.amountToPay ?? b.price ?? null;
+          if (b.move === "accept") dealPrice = o.amountToPay ?? b.price ?? null;
           if (b.move === "decline" || b.move === "priced-out" || b.move === "reject-fee") for (const id of b.to) {
             const booth = booths.find((x) => x.id === id);
             if (booth) booth.state = "out";
@@ -303,10 +316,10 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         }
         break;
       case "paypal":
-        checkout.push({ text: step.text, tone: step.effect === "voided" || step.effect === "refunded" ? "ok" : step.effect ? "ok" : "info" });
+        checkout.push({ text: step.text, tone: step.effect ? "ok" : "info" });
         if (step.effect) {
           statuses[step.line] = step.effect;
-          amounts[step.line] = step.effect === "voided" || step.effect === "refunded" ? null : o.amountToPay ?? null;
+          amounts[step.line] = step.effect === "voided" ? null : o.amountToPay ?? null;
         }
         break;
       case "event":

@@ -19,6 +19,12 @@ COST = {
 }
 
 PAY_NOW = {"shipping", "setup", "delivery"}
+# Certain later costs. Every other hidden fee is a condition (only if you return it,
+# exceed a limit, etc.): shown as a term, not counted as money.
+LATER = {"renewal", "commercial", "usage", "source-fee"}
+
+def fee_kind(fid):
+    return "now" if fid in PAY_NOW else "later" if fid in LATER else "conditional"
 
 GROUPS = {
     "online": "Online services",
@@ -299,8 +305,8 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
                    "floorRange": floor_range(typ, p)},
         "sellerTypes": sellers,
         "levers": [{"id": a, "label": phrase(b), "valueUsd": c} for a, b, c in levers],
-        # payNow: charged at checkout (shipping, setup). Otherwise a later cost (renewal, limits).
-        "hiddenFees": [{"id": a, "label": phrase(b), "valueUsd": c, "payNow": a in PAY_NOW} for a, b, c in fees],
+        # kind: "now" (charged at checkout), "later" (a certain later cost), "conditional" (a term).
+        "hiddenFees": [{"id": a, "label": phrase(b), "valueUsd": c, "payNow": a in PAY_NOW, "kind": fee_kind(a)} for a, b, c in fees],
     })
 
 catalog = {

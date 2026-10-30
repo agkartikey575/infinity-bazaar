@@ -11,8 +11,8 @@ export interface MissionLine {
   itemCapUsd: number;
   deal: DealResult;
   guard: GuardDecision | null;
-  /** What happens to the money: paid, waiting for your OK, blocked, refunded, or no deal. */
-  status: "paid" | "needs-approval" | "blocked" | "refunded" | "no-deal";
+  /** What happens to the money: paid, waiting for your OK, blocked, voided, or no deal. */
+  status: "paid" | "needs-approval" | "blocked" | "voided" | "no-deal";
 }
 
 export interface MissionResult {
@@ -66,15 +66,20 @@ export function runMission(
     const amount = o.amountToPay;
     const guard = checkPayment({
       amount,
+      currency: "USD",
       spentSoFar: spent + pending,
-      sellerId: o.sellerId,
+      sellerId: o.sellerName ?? o.sellerId,
       sellerName: o.sellerName ?? "",
       group: item.group,
+      alreadyPaid: false,
+      agreedAmount: (o.price ?? 0) + o.fee,
+      surpriseFee: o.surpriseFee,
+      laterFee: o.futureFee,
       rules: missionRules(mission, entry.itemCapUsd),
     });
     let status: MissionLine["status"] = guard.decision === "approve" ? "paid" : guard.decision === "ask_user" ? "needs-approval" : "blocked";
-    // A failed delivery voids or refunds the payment, so that money is free again.
-    if (status === "paid" && o.afterPayment) status = "refunded";
+    // A failed delivery voids the held payment, so that money is free again.
+    if (status === "paid" && o.afterPayment) status = "voided";
     if (status === "paid") spent += amount;
     if (status === "needs-approval") pending += amount;
     lines.push({ itemId: item.id, itemName: item.name, itemCapUsd: entry.itemCapUsd, deal, guard, status });

@@ -6,7 +6,7 @@ import { catalog, missions } from "../src/engine/index.ts";
 import { buildMissionRun, buildSingleRun, buildSteps, deriveView, type Decision, type Run, type Step } from "../lib/timeline.ts";
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
-const TERMINAL = new Set(["captured", "declined", "blocked", "no-deal", "voided", "refunded"]);
+const TERMINAL = new Set(["captured", "declined", "blocked", "no-deal", "voided"]);
 
 /** Plays a run to the end, answering every approval the same way. */
 function playAll(run: Run, answer: Decision) {

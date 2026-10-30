@@ -3,10 +3,10 @@
   "note": "Lines the engine fills with numbers it decided. {price}, {ref}, {fee}, {total}, {walk}, {low}, {upsell} are dollar amounts without the $ sign; {item}, {lever}, {feeLabel}, {name}, {text} are words. The wording never decides a price.",
   "agent": {
     "anchor": [
-      "Hi! I'm shopping for {item}. I've seen listings from ${low}, so my opening offer is ${price}.",
-      "Hello. I need {item} this week. The market starts around ${low}; I can do ${price} today.",
-      "Quick one: {item}. Comparable listings begin at ${low}. Would you take ${price}?",
-      "Hey there. I'm comparing a few sellers for {item}. Prices online start at ${low}, so I'm opening at ${price}."
+      "Hi! I'm shopping for {item}. I've seen listings from ${low}, and I'm hoping for around ${price}. What's your best price?",
+      "Hello. I need {item} this week. The market starts around ${low}; I'm aiming for about ${price}. What can you do?",
+      "Quick one: {item}. Comparable listings begin at ${low}. Could you get close to ${price}?",
+      "Hey there. I'm comparing a few sellers for {item}. Prices online start at ${low}, so I'm looking for something near ${price}. Your best price?"
     ],
     "offer": [
       "I can come up to ${price}.",
@@ -53,9 +53,8 @@
       "Done. ${price} it is."
     ],
     "declineOthers": [
-      "Thanks for your time. I went with another offer.",
-      "Appreciate it, but I closed elsewhere.",
-      "No deal this time. Another seller came in lower."
+      "Thanks for the quote. I went with another seller this time.",
+      "Appreciate it, but I closed elsewhere this time."
     ],
     "walkAway": [
       "Nobody came under ${walk}, so I'm walking away. No money spent.",
@@ -73,8 +72,8 @@
       "${total} including the fee. Done."
     ],
     "pricedOut": [
-      "With your fees you're over my limit. I'll pass, thanks.",
-      "All in, that's more than I can pay. No deal, thanks."
+      "That's above my limit. I'll pass, thanks.",
+      "I can't go that high. No deal, thanks."
     ],
     "holdOn": [
       "Hold that thought. I'm checking one more offer."
@@ -89,8 +88,8 @@
       "I have ${ref} all in elsewhere. ${price} plus your ${fee} fee beats that. Deal?"
     ],
     "explainFees": [
-      "Going with {name}: ${extra} more today, but the cheaper offers hide later fees.",
-      "{name} costs ${extra} more now, and saves me from those renewal fees later."
+      "Going with {name}: ${extra} more today, but the cheaper offers carry later fees.",
+      "{name} costs ${extra} more now, and saves me the later fees the others charge."
     ],
     "explainReliability": [
       "Going with {name}: ${extra} more than the cheapest, but far more likely to deliver on time.",
@@ -102,8 +101,42 @@
       "That ${fee} later is a dealbreaker. Thanks, but no."
     ],
     "stretch": [
-      "I'll go ${extra} over my limit for {name}. No later fees beats a cheaper sticker price.",
-      "{name} is ${extra} above my limit, but the cheaper offers carry later fees. Worth it."
+      "I said ${walk} was my limit, but at ${price} with no later fees, {name} beats the others' true cost. Deal.",
+      "{name}, ${price} is ${extra} over my limit, but the cheaper offers carry later fees. Worth it. Deal."
+    ],
+    "quoteRequest": [
+      "Another seller is at ${ref}. What's your best price?",
+      "I have ${ref} on the table elsewhere. Can you do better?",
+      "Best quote so far is ${ref}. Want to beat it?"
+    ],
+    "quoteRequestAllIn": [
+      "Another seller is at ${ref} all in. With your ${fee} fee, what's your best price?",
+      "I have ${ref} all in elsewhere, and you add a ${fee} fee. Can you do better?"
+    ],
+    "declineQuote": [
+      "Thanks for the quote. I went with an offer ${diff} cheaper all in.",
+      "Appreciate the quote, but another seller came in ${diff} lower all in."
+    ],
+    "pricedOutFees": [
+      "With your fees you're over my limit. I'll pass, thanks.",
+      "All in, that's more than I can pay. No deal, thanks."
+    ],
+    "noteTerm": [
+      "Noted: {feeLabel}. That's a condition, not a cost today.",
+      "Okay, {feeLabel}. I can live with that condition."
+    ],
+    "rejectAfterFee": [
+      "That fee changes things. Another seller is cheaper all in now. No deal.",
+      "With that fee you're no longer the best offer. I'll pass."
+    ],
+    "holdOffer": [
+      "${price} is still my offer.",
+      "I'm staying at ${price}.",
+      "Still ${price} from me. That hasn't changed."
+    ],
+    "holdOfferAllIn": [
+      "Still ${total} all in: ${price} plus your ${fee} fee.",
+      "I'm staying at ${total} all in."
     ]
   },
   "sellers": {
@@ -161,7 +194,10 @@
           "Take it or leave it, friend.",
           "I don't play games. That's the price."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "desperate-startup": {
       "counter": [
@@ -214,7 +250,10 @@
           "Buy today and we'll throw in something extra!",
           "Close now and we'll add a bonus!"
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "upseller": {
       "counter": [
@@ -273,7 +312,10 @@
           "Another buyer just offered more. I'm being generous to you.",
           "Someone's about to snap this up."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "big-brand": {
       "counter": [
@@ -329,7 +371,10 @@
           "I can't lower the price, but I can add perks.",
           "Instead of a discount, may I offer extras?"
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "reseller": {
       "counter": [
@@ -375,7 +420,10 @@
       "lost": [
         "Your choice, boss. Mine was cheaper upfront."
       ],
-      "tactics": {}
+      "tactics": {},
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "pro-freelancer": {
       "counter": [
@@ -430,7 +478,10 @@
           "For less money I'd have to do less work.",
           "I can hit a lower price with a smaller scope."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "volume-studio": {
       "counter": [
@@ -483,9 +534,12 @@
         ],
         "add-on-upsell": [
           "Most clients add our premium extras.",
-          "Want captions and color grading? Small add-on."
+          "Want the premium package? It's a small add-on."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "student-freelancer": {
       "counter": [
@@ -536,7 +590,10 @@
           "I'll have it done tomorrow, easy!",
           "Same-day delivery, no problem!"
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "friendly-local": {
       "counter": [
@@ -587,7 +644,10 @@
           "I'll add a little something on the house.",
           "No discount, but I'll add a treat."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     },
     "bulk-merch": {
       "counter": [
@@ -638,7 +698,10 @@
           "Order more and the unit price drops.",
           "Double the quantity and save 20% per unit."
         ]
-      }
+      },
+      "partialAbsorb": [
+        "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ]
     }
   },
   "commentary": {
@@ -674,9 +737,9 @@
       ]
     },
     "leverage": [
-      "The agent uses the best offer on the table against {name}.",
-      "Competition! {name} hears the rival quote.",
-      "The agent plays {name} against the leader."
+      "The agent shops {name} against the best quote on the table.",
+      "Competition! The rival quote goes to {name}.",
+      "The agent plays the best quote against {name}."
     ],
     "matched": [
       "{name} bites and drops to ${price}. Competition works.",

@@ -10,6 +10,8 @@ export interface Lever {
   valueUsd: number;
   /** For hidden fees: true when charged at checkout, false for a later cost such as a renewal. */
   payNow?: boolean;
+  /** For hidden fees: "now" (at checkout), "later" (a certain later cost) or "conditional" (a term, not a cost). */
+  kind?: "now" | "later" | "conditional";
 }
 
 export interface CatalogItem {
@@ -127,7 +129,7 @@ export type Beat =
       kind: "agent";
       round: number;
       to: string[];
-      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee" | "decline" | "explain" | "priced-out";
+      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee" | "decline" | "explain" | "priced-out" | "quote-request" | "note-term";
       price?: number;
       refPrice?: number;
       text: string;
@@ -160,6 +162,8 @@ export interface DealOutcome {
   surpriseFee?: boolean;
   /** Extras won instead of a lower price. */
   levers: Lever[];
+  /** Conditions the buyer accepted, such as "restocking fee on returns". */
+  terms: string[];
   /** price + fee now + later fee: what the deal really costs. */
   effectiveCost?: number;
   /** Amount PayPal is asked to move: price + fee. */

@@ -83,7 +83,7 @@
     {
       "id": "delivery-failure",
       "label": "Delivery failed",
-      "text": "{seller} failed to deliver. Refund triggered.",
+      "text": "{seller} failed to deliver. Releasing the hold.",
       "weight": 1,
       "afterPayment": true,
       "effect": {
