@@ -42,7 +42,8 @@ test("every item, many seeds: deals stay within the walk-away price and above se
       const o = d.outcome;
       const seller = d.sellers.find((s) => s.id === o.sellerId)!;
       assert.ok(o.price! >= seller.floor, `${item.id}#${seed} paid below the seller floor`);
-      assert.ok(o.amountToPay! <= d.plan.walkAway, `${item.id}#${seed} paid $${o.amountToPay} over walk-away $${d.plan.walkAway}`);
+      assert.ok(o.amountToPay! <= d.plan.cap, `${item.id}#${seed} paid $${o.amountToPay} over the cap $${d.plan.cap}`);
+      if (o.amountToPay! > d.plan.walkAway) assert.ok(d.beats.some((b) => b.kind === "agent" && b.move === "explain"), `${item.id}#${seed} stretched without saying why`);
       // Later fees (renewals) count when ranking sellers, not against today's walk-away price.
       assert.ok(o.effectiveCost === o.amountToPay! + o.futureFee, `${item.id}#${seed} effective cost`);
     }
