@@ -49,7 +49,7 @@ export function checkPayment(p: PaymentRequest): GuardDecision {
   const { amount, spentSoFar, rules } = p;
   const total = spentSoFar + amount;
   const checks: GuardCheck[] = [
-    { label: `${usd(amount)} is a valid amount in whole cents`, pass: Number.isFinite(amount) && amount > 0 && Math.round(amount * 100) === amount * 100 },
+    { label: `${usd(amount)} is a valid amount in whole cents`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6 },
     { label: `currency is USD`, pass: (p.currency ?? "USD") === "USD" },
     { label: `${usd(amount)} ≤ item cap ${rules.itemCapUsd === undefined ? "(none)" : usd(rules.itemCapUsd)}`, pass: rules.itemCapUsd === undefined || amount <= rules.itemCapUsd },
     { label: `total ${usd(total)} ≤ budget ${usd(rules.budgetUsd)}`, pass: total <= rules.budgetUsd },

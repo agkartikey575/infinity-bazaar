@@ -137,6 +137,31 @@
     "holdOfferAllIn": [
       "Still ${total} all in: ${price} plus your ${fee} fee.",
       "I'm staying at ${total} all in."
+    ],
+    "quoteRequestPlain": [
+      "What's your best price?",
+      "Can you sharpen your price?",
+      "Any room on that price?"
+    ],
+    "acceptQuote": [
+      "Your ${price} works for me.",
+      "${price} is fine. Let's do it."
+    ],
+    "rejectKnownFee": [
+      "With your ${fee} fee, you're over my limit. I'll pass.",
+      "All in with the ${fee} fee, that's too much. No deal."
+    ],
+    "absorbKnownAsk": [
+      "Your ${fee} fee puts you over. Take it off the price and we have a deal.",
+      "Drop the ${fee} fee and I'll buy now."
+    ],
+    "stretchRescue": [
+      "Nobody met ${walk}, but {name} at ${price} is close enough. Deal.",
+      "${price} is ${extra} over my limit, {name}, but close enough. Deal."
+    ],
+    "explainCommitted": [
+      "I already agreed with {name}. A deal is a deal.",
+      "{name} said yes first, so I'm keeping my word."
     ]
   },
   "sellers": {

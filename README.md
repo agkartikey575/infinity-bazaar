@@ -44,7 +44,7 @@ flowchart LR
    - checks for hidden fees and trades for extras instead of paying more
    - flags tricks such as fake urgency
 3. **Guard.** AgentGuard checks the item cap, the total budget and the seller, and asks you before any payment above your ask-me line.
-4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery. A failed delivery voids the hold, so no money moves.
+4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery (a PayPal authorization is honoured for 3 days and valid for up to 29). A failed delivery voids the hold, so no money moves.
 
 ## What's in the repo
 
