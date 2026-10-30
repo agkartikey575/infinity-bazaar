@@ -28,7 +28,6 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   blocked: "Blocked",
   "no-deal": "Walked away",
   voided: "Hold voided",
-  refunded: "Refunded",
 };
 
 const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
@@ -38,7 +37,8 @@ function Booth({ booth, color, floor }: { booth: BoothView; color: string; floor
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [booth.messages.length]);
 
   return (
@@ -51,8 +51,8 @@ function Booth({ booth, color, floor }: { booth: BoothView; color: string; floor
           <h3>{booth.name}</h3>
           <span>{archetypeLabel(booth.archetype)}</span>
         </div>
-        <div className="bprice" aria-label={`${booth.name} asks $${booth.price}`}>
-          ${booth.price}
+        <div className="bprice">
+          <span className="sr-only">{booth.name} asks </span>${booth.price}
         </div>
       </div>
       {booth.state === "blocked" && <div className="stamp">Blocked by AgentGuard</div>}
@@ -79,14 +79,15 @@ function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
     const settled = statuses[i] === "captured";
     if (settled) {
       paid += o.amountToPay ?? 0;
-      saved += item.price.typical - (o.amountToPay ?? 0);
+      // Same basis as each row: the true cost, including certain later fees.
+      saved += item.price.typical - (o.effectiveCost ?? o.amountToPay ?? 0);
     }
     return { l, o, i, settled };
   });
   return (
     <div className="receipt">
       <div className="receipt-head">
-        <span className="label">Mission receipt</span>
+        <span className="label">{run.kind === "mission" ? "Mission receipt" : "Receipt"}</span>
         <b>
           Paid {money(paid)} of {money(run.budgetUsd)} · saved {money(Math.max(0, saved))} against typical prices
         </b>
@@ -110,7 +111,7 @@ function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
                 <td>{o.sellerName ?? "—"}</td>
                 <td className="num">{settled ? money(o.amountToPay ?? 0) : "—"}</td>
                 <td className="num">{settled && o.savedVsTypical !== undefined ? `${o.savedVsTypical > 0 ? "−" : "+"}${Math.abs(o.savedVsTypical)}%` : "—"}</td>
-                <td>{o.levers.length ? o.levers.map((x) => x.label).join(", ") : "—"}</td>
+                <td>{settled && o.levers.length ? o.levers.map((x) => x.label).join(", ") : "—"}</td>
                 <td>
                   <span className={`pill ${statuses[i]}`}>{STATUS_LABEL[statuses[i]]}</span>
                 </td>
@@ -132,6 +133,9 @@ export default function DealRoom() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const approveRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const [seedDraft, setSeedDraft] = useState("42");
 
   const run = useMemo(() => {
     if (rogue) return buildSingleRun("usb-mic", seed, true);
@@ -152,12 +156,48 @@ export default function DealRoom() {
   }, [playing, cursor, steps, speed]);
 
   useEffect(() => {
-    if (awaiting) approveRef.current?.focus();
+    if (awaiting) {
+      lastFocus.current = document.activeElement as HTMLElement | null;
+      approveRef.current?.focus();
+    } else {
+      lastFocus.current?.focus?.();
+      lastFocus.current = null;
+    }
   }, [awaiting]);
+
+  // Keep keyboard focus inside the approval sheet; Escape declines.
+  const onSheetKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      decide("declined");
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const items = sheetRef.current?.querySelectorAll<HTMLElement>("button");
+    if (!items || !items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  const applySeed = () => {
+    const n = Math.floor(Number(seedDraft));
+    if (Number.isFinite(n) && n >= 1 && n !== seed) restart({ seed: n, rogue });
+    else setSeedDraft(String(seed));
+  };
 
   const restart = (next: { selection?: string; seed?: number; rogue?: boolean }) => {
     if (next.selection !== undefined) setSelection(next.selection);
-    if (next.seed !== undefined) setSeed(next.seed);
+    if (next.seed !== undefined) {
+      setSeed(next.seed);
+      setSeedDraft(String(next.seed));
+    }
     setRogue(next.rogue ?? false);
     setDecisions({});
     setCursor(0);
@@ -182,7 +222,8 @@ export default function DealRoom() {
   const askGuard = awaiting ? view.guard : null;
 
   return (
-    <main className="wrap">
+    <>
+    <main className="wrap" inert={awaiting || undefined}>
       <header className="top">
         <div className="brand">
           <h1>
@@ -219,14 +260,14 @@ export default function DealRoom() {
             <span className="label">Table #</span>
             <input
               id="seed"
-              type="number"
-              min={1}
-              value={seed}
-              onChange={(e) => {
-                const n = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                restart({ seed: n, rogue });
-              }}
+              inputMode="numeric"
+              value={seedDraft}
+              onChange={(e) => setSeedDraft(e.target.value.replace(/[^0-9]/g, ""))}
+              onBlur={applySeed}
+              onKeyDown={(e) => e.key === "Enter" && applySeed()}
+              aria-describedby="seed-help"
             />
+            <span id="seed-help" className="sr-only">Press Enter to replay this table.</span>
           </label>
           <div className="btns">
             <button
@@ -269,7 +310,8 @@ export default function DealRoom() {
           </div>
           <div className="budget">
             <span className="label">AgentGuard budget</span>
-            <div className="bbar" role="img" aria-label={`Committed $${view.committedUsd} of $${run.budgetUsd}`}>
+            <div className="bbar">
+              <span className="sr-only">Committed ${view.committedUsd} of ${run.budgetUsd}</span>
               <div className="bfill" style={{ width: `${capturedShare}%` }} />
               <div className="bheld" style={{ left: `${capturedShare}%`, width: `${heldShare}%` }} />
               <div className="bpending" style={{ left: `${capturedShare + heldShare}%`, width: `${pendingShare}%` }} />
@@ -342,7 +384,7 @@ export default function DealRoom() {
         <div className="rail">
           <div>
             <span className="label">Commentator</span>
-            <p className="caster" aria-live="polite">
+            <p className="caster">
               {view.commentary[0] ?? "Press play to start."}
             </p>
             <div className="history">
@@ -354,7 +396,7 @@ export default function DealRoom() {
           </div>
           <div>
             <span className="label">AgentGuard and PayPal sandbox</span>
-            <div className="checkout" aria-live="polite">
+            <div className="checkout">
               {view.checkout.length === 0 && <div className="row-info">Waiting for a deal…</div>}
               {view.checkout.map((r, i) => (
                 <div key={i} className={`row-${r.tone}`}>
@@ -381,9 +423,13 @@ export default function DealRoom() {
 
         {finished && <Receipt run={run} statuses={view.statuses} />}
       </section>
+      <p className="sr-only" aria-live="polite">
+        {run.lines.map((l, i) => `${l.itemName}: ${STATUS_LABEL[view.statuses[i]]}.`).join(" ")}
+      </p>
+    </main>
 
       {asking && askItem && (
-        <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" ref={sheetRef} onKeyDown={onSheetKey}>
           <div className="sheet-card">
             <span className="label">AgentGuard needs your OK</span>
             <h2 id="sheet-title">
@@ -417,9 +463,10 @@ export default function DealRoom() {
               </button>
               <button onClick={() => decide("declined")}>Decline</button>
             </div>
+            <span className="note">Esc declines.</span>
           </div>
         </div>
       )}
-    </main>
+    </>
   );
 }

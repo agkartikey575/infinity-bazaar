@@ -48,8 +48,10 @@ export function spawnSellers(item: CatalogItem, rng: Rng, memory: SellerMemory =
 
 /** Fee charged at checkout that the buyer knows about. */
 export const payNowFee = (s: Seller) => (s.fee && s.feeRevealed && s.fee.payNow ? s.fee.valueUsd : 0);
-/** Later fee (renewal, limits) that the buyer knows about. */
-export const laterFee = (s: Seller) => (s.fee && s.feeRevealed && !s.fee.payNow ? s.fee.valueUsd : 0);
+/** Certain later fee (a renewal, a usage fee) that the buyer knows about. Conditions don't count. */
+export const laterFee = (s: Seller) => (s.fee && s.feeRevealed && s.fee.kind === "later" ? s.fee.valueUsd : 0);
+/** What the deal really costs: price, checkout fee and certain later fees. */
+export const trueCost = (s: Seller, price = s.ask) => allIn(s, price) + laterFee(s);
 /** What the buyer pays now: price plus any known checkout fee. */
 export const allIn = (s: Seller, price = s.ask) => price + payNowFee(s);
 
@@ -59,7 +61,7 @@ export const allIn = (s: Seller, price = s.ask) => price + payNowFee(s);
  * Extras won are a bonus and never offset cash.
  */
 export function rank(s: Seller, item: CatalogItem, price = s.ask): number {
-  const cost = allIn(s, price) + laterFee(s);
+  const cost = trueCost(s, price);
   return item.delivery === "instant" ? cost : cost / Math.max(0.5, s.reliability);
 }
 
@@ -75,6 +77,8 @@ export interface ReplyContext {
   finalOffer: boolean;
   /** The agent raised an item-specific doubt with this offer. */
   doubted: boolean;
+  /** Price the agent mentioned with a quote request, used to judge a lowball. */
+  anchorHint?: number;
 }
 
 export interface Reply {
@@ -95,14 +99,18 @@ export const DETECT_LABEL: Record<string, string> = {
   upsell: "upsell",
 };
 
-/** A seller's answer to a cash offer. Sellers never counter below the offer and never go below their floor. */
-export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
+/**
+ * A seller's answer. `offer` is a firm cash offer, or null for a quote request
+ * (the agent asks for their best price without committing to one).
+ * Sellers never counter below a firm offer and never go below their floor.
+ */
+export function reply(s: Seller, offer: number | null, ctx: ReplyContext): Reply {
   const { rng, text, item, round } = ctx;
   const a = s.archetype.id;
   const beats: Beat[] = [];
   const closeEnough = Math.max(1, Math.round(item.price.typical * 0.03));
   // A final offer at or above the floor is usually taken; stubborn sellers sometimes hold out.
-  const takesFinal = ctx.finalOffer && offer >= s.floor && rng.chance(s.archetype.concession === "slow" ? 0.65 : 0.9);
+  const takesFinal = offer !== null && ctx.finalOffer && offer >= s.floor && rng.chance(s.archetype.concession === "slow" ? 0.65 : 0.9);
 
   const accept = (price: number): Reply => {
     s.ask = price;
@@ -111,9 +119,10 @@ export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
     return { beats, acceptedAt: price, matched: false };
   };
 
-  if (offer >= s.ask || (offer >= s.floor && (s.ask - offer <= closeEnough || takesFinal))) return accept(Math.min(offer, s.ask));
+  if (offer !== null && (offer >= s.ask || (offer >= s.floor && (s.ask - offer <= closeEnough || takesFinal)))) return accept(Math.min(offer, s.ask));
 
-  if (offer < s.floor * 0.75 && !s.insulted) {
+  const pressure = offer ?? ctx.anchorHint ?? null;
+  if (pressure !== null && pressure < s.floor * 0.75 && !s.insulted) {
     s.insulted = true;
     s.mood -= 1;
   }
@@ -143,7 +152,7 @@ export function reply(s: Seller, offer: number, ctx: ReplyContext): Reply {
   }
 
   // Never counter at or below the buyer's own offer: that is simply a yes.
-  if (next <= offer) return accept(offer);
+  if (offer !== null && next <= offer) return accept(offer);
 
   s.ask = next;
   s.final = s.ask <= s.floor;

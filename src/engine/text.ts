@@ -15,6 +15,7 @@ interface SellerLines {
   surpriseFee: Lines;
   grantLever: Lines;
   absorbFee: Lines;
+  partialAbsorb: Lines;
   exit: Lines;
   lost: Lines;
   tactics: Record<string, Lines>;
@@ -39,7 +40,9 @@ export type Vars = Record<string, string | number | undefined>;
 
 /** Replaces {name} placeholders. Unknown placeholders stay visible so tests catch them. */
 export function fill(template: string, vars: Vars): string {
-  return template.replace(/\{(\w+)\}/g, (m, key: string) => (vars[key] === undefined ? m : String(vars[key])));
+  const out = template.replace(/\{(\w+)\}/g, (m, key: string) => (vars[key] === undefined ? m : String(vars[key])));
+  // A placeholder can open a sentence ("{lever}? Sure"): capitalise sentence starts.
+  return out.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, ch: string) => lead + ch.toUpperCase());
 }
 
 /** Per-deal writer: picks fresh lines and avoids repeating one within the same deal. */

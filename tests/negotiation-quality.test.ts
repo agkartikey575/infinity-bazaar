@@ -48,8 +48,9 @@ test("seller counter-offers never go below the agent's standing offer", () => {
     const offerTo = new Map<string, number>();
     for (const b of d.beats) {
       if (b.kind === "agent" && b.price !== undefined && (b.move === "anchor" || b.move === "offer" || b.move === "leverage")) for (const id of b.to) offerTo.set(id, b.price);
-      // An event (flash sale, price match) may drop a seller's own price; that resets the comparison.
+      // An event (flash sale, price match) or a fresh quote request resets the comparison.
       if (b.kind === "event") offerTo.delete(b.sellerId);
+      if (b.kind === "agent" && b.move === "quote-request") for (const id of b.to) offerTo.delete(id);
       if (b.kind === "seller" && (b.move === "counter" || b.move === "final") && b.price !== undefined) {
         const o = offerTo.get(b.sellerId);
         assert.ok(o === undefined || b.price >= o, `${tag}: agent offered $${o}, seller countered $${b.price}`);
@@ -127,4 +128,33 @@ test("missions: AgentGuard's running total ignores money that was refunded", () 
     }
     assert.ok(getMission("hackathon-10-days"));
   }
+});
+
+test("a seller who accepts a firm offer is never declined (a yes is a commitment)", () => {
+  allDeals((d, tag) => {
+    d.beats.forEach((b, i) => {
+      if (b.kind !== "seller" || b.move !== "accept") return;
+      const declined = d.beats.slice(i + 1).some((x) => x.kind === "agent" && x.move === "decline" && x.to.includes(b.sellerId));
+      assert.ok(!declined, `${tag}: ${b.text} was later declined`);
+    });
+  });
+});
+
+test("only one seller per round gets a firm offer; the rest get quote requests", () => {
+  allDeals((d, tag) => {
+    const firm = new Map<number, number>();
+    for (const b of d.beats) if (b.kind === "agent" && b.move === "offer") firm.set(b.round, (firm.get(b.round) ?? 0) + b.to.length);
+    for (const [round, n] of firm) assert.ok(n <= 1, `${tag} round ${round}: ${n} firm offers`);
+  });
+});
+
+test("one cost model: never pay over the stretch, and say why when paying over walk-away", () => {
+  allDeals((d, tag) => {
+    const o = d.outcome;
+    if (o.status !== "deal" || o.rogue) return;
+    assert.ok(o.effectiveCost! <= d.plan.stretch, `${tag}: true cost $${o.effectiveCost} over stretch $${d.plan.stretch}`);
+    if (o.amountToPay! > d.plan.walkAway) assert.ok(d.beats.some((b) => b.kind === "agent" && b.move === "explain"), `${tag}: over walk-away without a reason`);
+    const explains = d.beats.filter((b) => b.kind === "agent" && b.move === "explain").length;
+    assert.ok(explains <= 1, `${tag}: ${explains} explanations`);
+  });
 });

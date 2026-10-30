@@ -76,7 +76,8 @@
           "id": "renewal",
           "label": "renewal price far above first-year price",
           "valueUsd": 25,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -136,13 +137,15 @@
           "id": "renewal",
           "label": "renewal at full list price",
           "valueUsd": 40,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         },
         {
           "id": "setup",
           "label": "one-time setup fee",
           "valueUsd": 15,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -202,7 +205,8 @@
           "id": "renewal",
           "label": "renewal price far above first-year price",
           "valueUsd": 50,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -257,7 +261,8 @@
           "id": "expiry",
           "label": "credits expire in 30 days",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -312,7 +317,8 @@
           "id": "egress",
           "label": "data transfer billed separately",
           "valueUsd": 12,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -367,7 +373,8 @@
           "id": "overage",
           "label": "overage fees past the limit",
           "valueUsd": 10,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -470,7 +477,8 @@
           "id": "renewal",
           "label": "renewal at full list price",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -530,7 +538,8 @@
           "id": "commercial",
           "label": "commercial use costs extra",
           "valueUsd": 40,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -585,7 +594,8 @@
           "id": "attribution",
           "label": "attribution required unless you pay more",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -640,7 +650,8 @@
           "id": "per-project",
           "label": "license covers one project only",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -695,7 +706,8 @@
           "id": "pageviews",
           "label": "pageview cap on the web license",
           "valueUsd": 30,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -750,7 +762,8 @@
           "id": "monetization",
           "label": "YouTube use needs a higher tier",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -954,7 +967,8 @@
           "id": "shipping",
           "label": "shipping added at checkout",
           "valueUsd": 9,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -1009,7 +1023,8 @@
           "id": "shipping",
           "label": "shipping added at checkout",
           "valueUsd": 8,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -1064,7 +1079,8 @@
           "id": "shipping",
           "label": "shipping added at checkout",
           "valueUsd": 7,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -1119,7 +1135,8 @@
           "id": "shipping",
           "label": "oversize shipping fee",
           "valueUsd": 12,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -1275,7 +1292,8 @@
           "id": "restocking",
           "label": "restocking fee on returns",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -1335,7 +1353,8 @@
           "id": "restocking",
           "label": "restocking fee on returns",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -1438,7 +1457,8 @@
           "id": "revision-fee",
           "label": "revisions billed separately",
           "valueUsd": 30,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
@@ -1498,7 +1518,8 @@
           "id": "source-fee",
           "label": "source files cost extra",
           "valueUsd": 30,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -1649,7 +1670,8 @@
           "id": "usage",
           "label": "commercial usage fee",
           "valueUsd": 25,
-          "payNow": false
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
@@ -1853,7 +1875,8 @@
           "id": "delivery",
           "label": "delivery and service fees",
           "valueUsd": 10,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -1961,7 +1984,8 @@
           "id": "setup",
           "label": "print setup fee",
           "valueUsd": 25,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
@@ -2016,7 +2040,8 @@
           "id": "setup",
           "label": "die setup fee",
           "valueUsd": 15,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },

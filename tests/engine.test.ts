@@ -84,7 +84,7 @@ test("missions never spend more than the budget", () => {
     for (const seed of SEEDS.slice(0, 20)) {
       const r = runMission(m.id, { seed, includeNice: true });
       assert.ok(r.spentUsd + r.pendingUsd <= r.budgetUsd, `${m.id}#${seed}`);
-      for (const line of r.lines) if (line.status === "paid" || line.status === "refunded") assert.equal(line.guard?.decision, "approve");
+      for (const line of r.lines) if (line.status === "paid" || line.status === "voided") assert.equal(line.guard?.decision, "approve");
     }
   }
 });

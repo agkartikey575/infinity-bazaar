@@ -9,6 +9,7 @@ export interface GuardRules {
   reserveUsd?: number;
   /** Catalog groups the mission allows. */
   allowedGroups?: string[];
+  /** Stable seller keys (names in this version) the user never wants to pay. */
   blockedSellerIds?: string[];
 }
 
@@ -33,6 +34,12 @@ export interface PaymentRequest {
   group?: string;
   /** True when this line already has a payment. */
   alreadyPaid?: boolean;
+  /** The amount the engine agreed (price + disclosed fee). The payment must match it exactly. */
+  agreedAmount?: number;
+  /** A fee came out only at checkout. */
+  surpriseFee?: boolean;
+  /** A certain later cost (renewal, usage fee) the buyer takes on. */
+  laterFee?: number;
   rules: GuardRules;
 }
 
@@ -49,6 +56,7 @@ export function checkPayment(p: PaymentRequest): GuardDecision {
     { label: `${p.sellerName} is an allowed seller`, pass: !(rules.blockedSellerIds ?? []).includes(p.sellerId) },
     { label: `item category is allowed`, pass: !rules.allowedGroups || !p.group || rules.allowedGroups.includes(p.group) },
     { label: `not already paid`, pass: !p.alreadyPaid },
+    { label: `matches the agreed price${p.agreedAmount === undefined ? "" : ` ${usd(p.agreedAmount)}`}`, pass: p.agreedAmount === undefined || p.agreedAmount === amount },
   ];
   if (checks.some((c) => !c.pass)) {
     const failed = checks.filter((c) => !c.pass).map((c) => c.label);
@@ -59,6 +67,14 @@ export function checkPayment(p: PaymentRequest): GuardDecision {
   const overLine = amount > rules.askAboveUsd;
   checks.push({ label: `${usd(amount)} ≤ ask-me line ${usd(rules.askAboveUsd)}`, pass: !overLine });
   if (overLine) reasons.push(`${usd(amount)} is above your ${usd(rules.askAboveUsd)} ask-me line`);
+  if (p.surpriseFee) {
+    checks.push({ label: `no fee sprung at checkout`, pass: false });
+    reasons.push(`a fee only came out at checkout`);
+  }
+  if (p.laterFee) {
+    checks.push({ label: `no later charges`, pass: false });
+    reasons.push(`it commits you to ${usd(p.laterFee)} later`);
+  }
   if (rules.reserveUsd) {
     const room = rules.budgetUsd - rules.reserveUsd;
     const dips = total > room;

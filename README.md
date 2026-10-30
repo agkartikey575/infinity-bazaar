@@ -16,7 +16,8 @@ npm run dev           # deal room at http://localhost:3000
 ```bash
 npm run demo          # a full "hackathon in 10 days, $300" mission in the terminal
 npm run demo:rogue    # the agent falls for an upsell; AgentGuard blocks it
-npm test              # engine tests
+npm test              # engine, negotiation-quality and playback tests
+npm run e2e           # real-browser checks (needs Playwright and `npx next start -p 3100` running)
 ```
 
 ## How a mission works
@@ -34,7 +35,7 @@ flowchart LR
   pp --> receipt[Receipt and savings]
 ```
 
-1. **Plan.** The agent picks items from the catalog and sets a cap for each.
+1. **Plan.** Each mission comes with a shopping list from the catalog and a cap for each item.
 2. **Negotiate.** For each item, three randomized sellers with hidden lowest prices and their own tactics negotiate in parallel. The agent:
    - anchors just under the web low
    - knows its walk-away price
@@ -43,7 +44,7 @@ flowchart LR
    - checks for hidden fees and trades for extras instead of paying more
    - flags tricks such as fake urgency
 3. **Guard.** AgentGuard checks the item cap, the total budget and the seller, and asks you before any payment above your ask-me line.
-4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery. A failed delivery voids the hold or refunds the payment.
+4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery. A failed delivery voids the hold, so no money moves.
 
 ## What's in the repo
 
@@ -53,7 +54,7 @@ flowchart LR
 | `src/engine/` | Negotiation engine, AgentGuard and mission runner: pure TypeScript and seeded, so any run replays exactly |
 | `lib/timeline.ts` | Turns engine results into the step-by-step playback the deal room shows |
 | `components/DealRoom.tsx`, `app/` | The Next.js deal room |
-| `tests/` | Engine tests: plans, determinism, floors, walk-away, AgentGuard, missions, seller memory |
+| `tests/` | Engine, negotiation-quality and playback tests, plus a Playwright end-to-end script in `tests/e2e/` |
 
 ## Status
 
@@ -61,7 +62,7 @@ flowchart LR
 | --- | --- |
 | Catalog, negotiation engine, AgentGuard | Done, tested |
 | Deal room web app | Working; arena redesign in progress |
-| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void, refund) | Next. The deal room currently shows **simulated** PayPal calls |
+| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void) | Next. The deal room currently shows **simulated** PayPal calls |
 | AI voices for sellers | Planned. The engine decides every price; the AI only rewrites the wording |
 
 Catalog prices are hand-researched estimates (`confidence: "estimate"`), not live data.
