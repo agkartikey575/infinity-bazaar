@@ -3,10 +3,10 @@
   "note": "Lines the engine fills with numbers it decided. {price}, {ref}, {fee}, {total}, {walk}, {low}, {upsell} are dollar amounts without the $ sign; {item}, {lever}, {feeLabel}, {name}, {text} are words. The wording never decides a price.",
   "agent": {
     "anchor": [
-      "Hi! I'm shopping for a {item}. I've seen listings from ${low}, so my opening offer is ${price}.",
-      "Hello. I need a {item} this week. The market starts around ${low}; I can do ${price} today.",
+      "Hi! I'm shopping for {item}. I've seen listings from ${low}, so my opening offer is ${price}.",
+      "Hello. I need {item} this week. The market starts around ${low}; I can do ${price} today.",
       "Quick one: {item}. Comparable listings begin at ${low}. Would you take ${price}?",
-      "Hey there. I'm comparing a few sellers for a {item}. Prices online start at ${low}, so I'm opening at ${price}."
+      "Hey there. I'm comparing a few sellers for {item}. Prices online start at ${low}, so I'm opening at ${price}."
     ],
     "offer": [
       "I can come up to ${price}.",
@@ -37,9 +37,9 @@
       "Add {lever} and I'll stop haggling."
     ],
     "absorbAsk": [
-      "I didn't budget for {feeLabel}. Take it off the price, or I walk.",
-      "That fee wasn't in your quote. Absorb {feeLabel} or the deal is off.",
-      "Surprise fees are a deal-breaker. Cover {feeLabel} and we're done."
+      "That ${fee} wasn't in your quote. Take it off the price, or I walk.",
+      "I didn't budget for an extra ${fee}. Absorb it and we're done.",
+      "Surprise fees are a deal-breaker. Cover the ${fee} and the deal stands."
     ],
     "rejectFee": [
       "A surprise ${fee} fee? That changes the deal. I'm out.",
@@ -66,6 +66,35 @@
       "The premium bundle sounds like the best version. Deal at ${price}, paying now.",
       "You've convinced me. ${price} for the premium bundle. Pay it.",
       "Best version, you say? Fine, ${price}. Charge it."
+    ],
+    "acceptAllIn": [
+      "Deal: ${price} plus ${fee}, ${total} all in.",
+      "Agreed at ${total} all in. Sending it to checkout.",
+      "${total} including the fee. Done."
+    ],
+    "pricedOut": [
+      "With your fees you're over my limit. I'll pass, thanks.",
+      "All in, that's more than I can pay. No deal, thanks."
+    ],
+    "holdOn": [
+      "Hold that thought. I'm checking one more offer."
+    ],
+    "offerAllIn": [
+      "${price} plus your ${fee} fee, so ${total} all in.",
+      "Counting your ${fee} fee, I can do ${price}: ${total} total.",
+      "${total} all in is my number, which means ${price} plus the ${fee} fee."
+    ],
+    "leverageAllIn": [
+      "Another seller is at ${ref} all in. With your ${fee} fee, I can offer ${price}.",
+      "I have ${ref} all in elsewhere. ${price} plus your ${fee} fee beats that. Deal?"
+    ],
+    "explainFees": [
+      "Going with {name}: ${extra} more today, but the cheaper offers hide later fees.",
+      "{name} costs ${extra} more now, and saves me from those renewal fees later."
+    ],
+    "explainReliability": [
+      "Going with {name}: ${extra} more than the cheapest, but far more likely to deliver on time.",
+      "{name} costs ${extra} more, and their delivery record is worth it."
     ]
   },
   "sellers": {
@@ -86,17 +115,43 @@
         "Fine, ${price}. You drive a hard bargain, young one.",
         "${price}. Don't tell the other stalls."
       ],
-      "noFee": ["No tricks at my stall. The price is the price.", "What you see is what you pay."],
-      "lieNoFee": ["Fees? I've never charged a fee in my life."],
-      "revealFee": ["Well… there's {feeLabel}, about ${fee}. Always has been."],
-      "surpriseFee": ["Ah, I forgot to mention {feeLabel}: ${fee}."],
-      "grantLever": ["Alright, {lever}. For a patient customer.", "Fine, {lever} too. Don't spread it around."],
-      "absorbFee": ["Bah. I'll eat the fee: ${price} plus ${fee}, ${total} all in."],
-      "exit": ["I'm closing up for the day. Good luck."],
-      "lost": ["Your loss. Mine would have lasted twenty years."],
+      "noFee": [
+        "No tricks at my stall. The price is the price.",
+        "What you see is what you pay."
+      ],
+      "lieNoFee": [
+        "Fees? I've never charged a fee in my life."
+      ],
+      "revealFee": [
+        "Well… one thing: {feeLabel}, about ${fee}. Always has been.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Ah, I forgot to mention: {feeLabel}. That's ${fee} more.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "Alright, {lever}. For a patient customer.",
+        "Fine, {lever} too. Don't spread it around."
+      ],
+      "absorbFee": [
+        "Bah. I'll eat the fee: ${price} plus ${fee}, ${total} all in."
+      ],
+      "exit": [
+        "I'm closing up for the day. Good luck."
+      ],
+      "lost": [
+        "Your loss. Mine would have lasted twenty years."
+      ],
       "tactics": {
-        "appeal-to-quality": ["These are built to last. You get what you pay for.", "Cheap ones break. Mine don't."],
-        "take-it-or-leave-it": ["Take it or leave it, friend.", "I don't play games. That's the price."]
+        "appeal-to-quality": [
+          "These are built to last. You get what you pay for.",
+          "Cheap ones break. Mine don't."
+        ],
+        "take-it-or-leave-it": [
+          "Take it or leave it, friend.",
+          "I don't play games. That's the price."
+        ]
       }
     },
     "desperate-startup": {
@@ -116,16 +171,40 @@
         "${price} works! Thank you so much!",
         "Done at ${price}. Leave us a review?"
       ],
-      "noFee": ["No fees, we promise!", "Price is all in. Transparent pricing is our thing!"],
-      "lieNoFee": ["No hidden fees here, friend!", "Nope, nothing extra. Trust us!"],
-      "revealFee": ["Um… there's {feeLabel}, about ${fee}. Sorry!"],
-      "surpriseFee": ["Oh! There's {feeLabel} too: ${fee}. Our checkout adds it."],
-      "grantLever": ["{lever}? Absolutely, it's on us!", "Sure, {lever} included. Anything to close!"],
-      "absorbFee": ["Okay, we'll cover it! ${price} plus ${fee}, ${total} total."],
-      "exit": ["Sorry, we just ran out of runway. Gotta go!"],
-      "lost": ["Aw. Come back when we launch v2!"],
+      "noFee": [
+        "No fees, we promise!",
+        "Price is all in. Transparent pricing is our thing!"
+      ],
+      "lieNoFee": [
+        "No hidden fees here, friend!",
+        "Nope, nothing extra. Trust us!"
+      ],
+      "revealFee": [
+        "Um, full honesty: {feeLabel}, about ${fee}. Sorry!",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Oh! Our checkout adds this: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "{lever}? Absolutely, it's on us!",
+        "Sure, {lever} included. Anything to close!"
+      ],
+      "absorbFee": [
+        "Okay, we'll cover it! ${price} plus ${fee}, ${total} total."
+      ],
+      "exit": [
+        "Sorry, we just ran out of runway. Gotta go!"
+      ],
+      "lost": [
+        "Aw. Come back when we launch v2!"
+      ],
       "tactics": {
-        "bundle-sweetener": ["Buy today and we'll throw in something extra!", "Close now and we'll add a bonus!"]
+        "bundle-sweetener": [
+          "Buy today and we'll throw in something extra!",
+          "Close now and we'll add a bonus!"
+        ]
       }
     },
     "upseller": {
@@ -145,18 +224,46 @@
         "${price}, sold! A pleasure, darling.",
         "Fine, ${price}. Don't tell my other clients."
       ],
-      "noFee": ["No fees, darling. Only class."],
-      "lieNoFee": ["Fees? How vulgar. None at all."],
-      "revealFee": ["A tiny detail: {feeLabel}, ${fee}."],
-      "surpriseFee": ["Oh, and {feeLabel}: ${fee}. A trifle."],
-      "grantLever": ["{lever}, darling. Consider it a gift.", "Fine, {lever}. Only for you."],
-      "absorbFee": ["Ugh, fine. ${price} plus ${fee}: ${total}. You're ruthless."],
-      "exit": ["I have a more important client waiting. Ciao."],
-      "lost": ["Your loss, darling. Mine was the luxury option."],
+      "noFee": [
+        "No fees, darling. Only class."
+      ],
+      "lieNoFee": [
+        "Fees? How vulgar. None at all."
+      ],
+      "revealFee": [
+        "A tiny detail, darling: {feeLabel}, ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Oh, and a trifle, darling: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "{lever}, darling. Consider it a gift.",
+        "Fine, {lever}. Only for you."
+      ],
+      "absorbFee": [
+        "Ugh, fine. ${price} plus ${fee}: ${total}. You're ruthless."
+      ],
+      "exit": [
+        "I have a more important client waiting. Ciao."
+      ],
+      "lost": [
+        "Your loss, darling. Mine was the luxury option."
+      ],
       "tactics": {
-        "false-urgency": ["Only two left, and they're flying off the shelf!", "This price ends in an hour. Decide, darling."],
-        "upsell": ["Forget the basic one. The premium bundle is only ${upsell} today.", "Why settle? The Gold edition is yours for ${upsell}."],
-        "phantom-buyer": ["Another buyer just offered more. I'm being generous to you.", "Someone's about to snap this up."]
+        "false-urgency": [
+          "Only two left, and they're flying off the shelf!",
+          "This price ends in an hour. Decide, darling."
+        ],
+        "upsell": [
+          "Forget the basic one. The premium bundle is only ${upsell} today.",
+          "Why settle? The Gold edition is yours for ${upsell}."
+        ],
+        "phantom-buyer": [
+          "Another buyer just offered more. I'm being generous to you.",
+          "Someone's about to snap this up."
+        ]
       }
     },
     "big-brand": {
@@ -176,17 +283,43 @@
         "Confirmed at ${price}.",
         "Your order at ${price} is ready to process."
       ],
-      "noFee": ["Our price includes all standard fees.", "No additional fees apply."],
-      "lieNoFee": ["All fees are included."],
-      "revealFee": ["Please note {feeLabel}: ${fee}."],
-      "surpriseFee": ["At checkout, {feeLabel} of ${fee} applies."],
-      "grantLever": ["I can add {lever} to your order.", "{lever} has been applied."],
-      "absorbFee": ["As a courtesy, we'll adjust: ${price} plus ${fee}, ${total} total."],
-      "exit": ["This offer is no longer available."],
-      "lost": ["Thank you for considering us."],
+      "noFee": [
+        "Our price includes all standard fees.",
+        "No additional fees apply."
+      ],
+      "lieNoFee": [
+        "All fees are included."
+      ],
+      "revealFee": [
+        "Please note our terms: {feeLabel}, ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "At checkout our terms apply: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "I can add {lever} to your order.",
+        "{lever} has been applied."
+      ],
+      "absorbFee": [
+        "As a courtesy, we'll adjust: ${price} plus ${fee}, ${total} total."
+      ],
+      "exit": [
+        "This offer is no longer available."
+      ],
+      "lost": [
+        "Thank you for considering us."
+      ],
       "tactics": {
-        "policy-wall": ["Company policy doesn't allow larger discounts.", "Discounts beyond this need director approval."],
-        "perk-instead-of-discount": ["I can't lower the price, but I can add perks.", "Instead of a discount, may I offer extras?"]
+        "policy-wall": [
+          "Company policy doesn't allow larger discounts.",
+          "Discounts beyond this need director approval."
+        ],
+        "perk-instead-of-discount": [
+          "I can't lower the price, but I can add perks.",
+          "Instead of a discount, may I offer extras?"
+        ]
       }
     },
     "reseller": {
@@ -201,15 +334,38 @@
         "Can't go below ${price}, boss.",
         "${price} final. Look around, you won't find lower."
       ],
-      "accept": ["${price}, deal, boss.", "${price}, done. Easy business.", "Sold at ${price}."],
-      "noFee": ["Price is all in, boss."],
-      "lieNoFee": ["Fees? Nah. Cheapest price, nothing else."],
-      "revealFee": ["Okay, small print: {feeLabel}, ${fee}."],
-      "surpriseFee": ["Oh, plus {feeLabel}: ${fee}. Standard stuff."],
-      "grantLever": ["{lever}? Fine, thrown in.", "Okay, {lever}. Happy now?"],
-      "absorbFee": ["Fine, fine. ${price} plus ${fee}, ${total} total."],
-      "exit": ["Stock's gone, boss."],
-      "lost": ["Your choice, boss. Mine was cheaper upfront."],
+      "accept": [
+        "${price}, deal, boss.",
+        "${price}, done. Easy business.",
+        "Sold at ${price}."
+      ],
+      "noFee": [
+        "Price is all in, boss."
+      ],
+      "lieNoFee": [
+        "Fees? Nah. Cheapest price, nothing else."
+      ],
+      "revealFee": [
+        "Okay, small print: {feeLabel}, ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Plus the standard stuff: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "{lever}? Fine, thrown in.",
+        "Okay, {lever}. Happy now?"
+      ],
+      "absorbFee": [
+        "Fine, fine. ${price} plus ${fee}, ${total} total."
+      ],
+      "exit": [
+        "Stock's gone, boss."
+      ],
+      "lost": [
+        "Your choice, boss. Mine was cheaper upfront."
+      ],
       "tactics": {}
     },
     "pro-freelancer": {
@@ -224,18 +380,47 @@
         "I won't go below ${price}. My calendar is full anyway.",
         "${price}. That's what this work is worth."
       ],
-      "accept": ["${price} works. I'll send a schedule today.", "Agreed at ${price}. Looking forward to it.", "${price}. Let's do great work."],
-      "noFee": ["No extras. Revisions are included in my rate."],
-      "lieNoFee": ["Everything's included."],
-      "revealFee": ["Note: {feeLabel}, about ${fee}."],
-      "surpriseFee": ["One thing I should mention: {feeLabel}, ${fee}."],
-      "grantLever": ["I can include {lever}.", "Fine, {lever}. For a good brief."],
-      "absorbFee": ["I'll absorb it: ${price} plus ${fee}, ${total} total."],
-      "exit": ["A bigger client just booked my week. Sorry."],
-      "lost": ["Understood. Good luck with the project."],
+      "accept": [
+        "${price} works. I'll send a schedule today.",
+        "Agreed at ${price}. Looking forward to it.",
+        "${price}. Let's do great work."
+      ],
+      "noFee": [
+        "No extras. Revisions are included in my rate."
+      ],
+      "lieNoFee": [
+        "Everything's included."
+      ],
+      "revealFee": [
+        "To be transparent: {feeLabel}, about ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "One thing I should have mentioned: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "I can include {lever}.",
+        "Fine, {lever}. For a good brief."
+      ],
+      "absorbFee": [
+        "I'll absorb it: ${price} plus ${fee}, ${total} total."
+      ],
+      "exit": [
+        "A bigger client just booked my week. Sorry."
+      ],
+      "lost": [
+        "Understood. Good luck with the project."
+      ],
       "tactics": {
-        "scarcity-of-time": ["My calendar is nearly full this week.", "I have one slot left before next month."],
-        "scope-trade": ["For less money I'd have to do less work.", "I can hit a lower price with a smaller scope."]
+        "scarcity-of-time": [
+          "My calendar is nearly full this week.",
+          "I have one slot left before next month."
+        ],
+        "scope-trade": [
+          "For less money I'd have to do less work.",
+          "I can hit a lower price with a smaller scope."
+        ]
       }
     },
     "volume-studio": {
@@ -245,19 +430,52 @@
         "${price}, with our usual turnaround.",
         "Let me check… ${price} works for us."
       ],
-      "final": ["${price} is the bottom of our package range.", "Our floor for this package is ${price}.", "${price}. We can't go lower and keep quality."],
-      "accept": ["${price}, booked. Kickoff call tomorrow?", "Confirmed at ${price}.", "${price}, great. Sending the brief form."],
-      "noFee": ["The package price covers everything."],
-      "lieNoFee": ["All included in the package."],
-      "revealFee": ["Heads up: {feeLabel}, ${fee}."],
-      "surpriseFee": ["Our system adds {feeLabel}: ${fee}."],
-      "grantLever": ["We'll add {lever} to the package.", "{lever} included."],
-      "absorbFee": ["We'll cover it: ${price} plus ${fee}, ${total}."],
-      "exit": ["We're at capacity this week, sorry."],
-      "lost": ["No problem. Our door's open next time."],
+      "final": [
+        "${price} is the bottom of our package range.",
+        "Our floor for this package is ${price}.",
+        "${price}. We can't go lower and keep quality."
+      ],
+      "accept": [
+        "${price}, booked. Kickoff call tomorrow?",
+        "Confirmed at ${price}.",
+        "${price}, great. Sending the brief form."
+      ],
+      "noFee": [
+        "The package price covers everything."
+      ],
+      "lieNoFee": [
+        "All included in the package."
+      ],
+      "revealFee": [
+        "Heads up from our terms: {feeLabel}, ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Our system just added this: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "We'll add {lever} to the package.",
+        "{lever} included."
+      ],
+      "absorbFee": [
+        "We'll cover it: ${price} plus ${fee}, ${total}."
+      ],
+      "exit": [
+        "We're at capacity this week, sorry."
+      ],
+      "lost": [
+        "No problem. Our door's open next time."
+      ],
       "tactics": {
-        "package-anchor": ["Our packages are fixed, but there's some room inside them.", "Most clients choose Standard."],
-        "add-on-upsell": ["Most clients add our premium extras.", "Want captions and color grading? Small add-on."]
+        "package-anchor": [
+          "Our packages are fixed, but there's some room inside them.",
+          "Most clients choose Standard."
+        ],
+        "add-on-upsell": [
+          "Most clients add our premium extras.",
+          "Want captions and color grading? Small add-on."
+        ]
       }
     },
     "student-freelancer": {
@@ -267,18 +485,48 @@
         "How about ${price}? I'm fast, I promise.",
         "${price}! It'd be great for my portfolio."
       ],
-      "final": ["${price} is the lowest I can go, rent is due.", "I can't really do less than ${price}.", "${price}, final. Sorry!"],
-      "accept": ["${price}! Yes! I'll start tonight!", "Deal at ${price}! Thank you!", "${price} works. Can I credit you in my portfolio?"],
-      "noFee": ["No fees, just me and my laptop."],
-      "lieNoFee": ["Nope, no extra charges."],
-      "revealFee": ["Oh, I charge {feeLabel}: ${fee}. Sorry, forgot."],
-      "surpriseFee": ["Wait, I forgot {feeLabel}: ${fee}."],
-      "grantLever": ["Sure, {lever}!", "{lever}? Yeah, okay!"],
-      "absorbFee": ["Okay, I'll skip the fee. ${price} plus ${fee}, ${total}."],
-      "exit": ["Exams just hit. I have to drop this, sorry!"],
-      "lost": ["No worries! Maybe next time."],
+      "final": [
+        "${price} is the lowest I can go, rent is due.",
+        "I can't really do less than ${price}.",
+        "${price}, final. Sorry!"
+      ],
+      "accept": [
+        "${price}! Yes! I'll start tonight!",
+        "Deal at ${price}! Thank you!",
+        "${price} works. Can I credit you in my portfolio?"
+      ],
+      "noFee": [
+        "No fees, just me and my laptop."
+      ],
+      "lieNoFee": [
+        "Nope, no extra charges."
+      ],
+      "revealFee": [
+        "Oh, I should say: {feeLabel}, ${fee}. Sorry, forgot.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Wait, I forgot: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "Sure, {lever}!",
+        "{lever}? Yeah, okay!"
+      ],
+      "absorbFee": [
+        "Okay, I'll skip the fee. ${price} plus ${fee}, ${total}."
+      ],
+      "exit": [
+        "Exams just hit. I have to drop this, sorry!"
+      ],
+      "lost": [
+        "No worries! Maybe next time."
+      ],
       "tactics": {
-        "overpromise": ["I'll have it done tomorrow, easy!", "Same-day delivery, no problem!"]
+        "overpromise": [
+          "I'll have it done tomorrow, easy!",
+          "Same-day delivery, no problem!"
+        ]
       }
     },
     "friendly-local": {
@@ -288,18 +536,48 @@
         "Let's say ${price}, neighbour.",
         "${price}. Fresh and made with love."
       ],
-      "final": ["${price}, love. I've got bills too.", "Can't go below ${price}, sweetheart.", "${price}. That's the family price."],
-      "accept": ["${price}! Come back soon!", "Done, ${price}. Say hi to the team!", "${price}. Enjoy every bite!"],
-      "noFee": ["No fees here. Just honest prices."],
-      "lieNoFee": ["Fees? Not at this shop."],
-      "revealFee": ["Just {feeLabel}, about ${fee}."],
-      "surpriseFee": ["Oh, and {feeLabel}: ${fee}, love."],
-      "grantLever": ["{lever}, on the house!", "Go on then, {lever} included."],
-      "absorbFee": ["Fine, I'll cover it. ${price} plus ${fee}, ${total}."],
-      "exit": ["We're closing early today, sorry love."],
-      "lost": ["Next time, then! Door's always open."],
+      "final": [
+        "${price}, love. I've got bills too.",
+        "Can't go below ${price}, sweetheart.",
+        "${price}. That's the family price."
+      ],
+      "accept": [
+        "${price}! Come back soon!",
+        "Done, ${price}. Say hi to the team!",
+        "${price}. Enjoy every bite!"
+      ],
+      "noFee": [
+        "No fees here. Just honest prices."
+      ],
+      "lieNoFee": [
+        "Fees? Not at this shop."
+      ],
+      "revealFee": [
+        "Just one thing, love: {feeLabel}, about ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Oh, and one more thing, love: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "{lever}, on the house!",
+        "Go on then, {lever} included."
+      ],
+      "absorbFee": [
+        "Fine, I'll cover it. ${price} plus ${fee}, ${total}."
+      ],
+      "exit": [
+        "We're closing early today, sorry love."
+      ],
+      "lost": [
+        "Next time, then! Door's always open."
+      ],
       "tactics": {
-        "freebie-instead-of-discount": ["I'll add a little something on the house.", "No discount, but I'll add a treat."]
+        "freebie-instead-of-discount": [
+          "I'll add a little something on the house.",
+          "No discount, but I'll add a treat."
+        ]
       }
     },
     "bulk-merch": {
@@ -309,18 +587,48 @@
         "Our tier price for that is ${price}.",
         "${price}. Order more and it drops further."
       ],
-      "final": ["${price} is our lowest tier price.", "Can't beat ${price} at this quantity.", "${price}, final for this run."],
-      "accept": ["${price}, booked into the next print run.", "Done at ${price}. Proofs tomorrow.", "${price}. Pressing go."],
-      "noFee": ["Setup is included at this tier."],
-      "lieNoFee": ["No setup fee, all included."],
-      "revealFee": ["There's {feeLabel}: ${fee}."],
-      "surpriseFee": ["Our quote didn't show {feeLabel}: ${fee}."],
-      "grantLever": ["We'll add {lever}.", "{lever}, done."],
-      "absorbFee": ["We'll waive it: ${price} plus ${fee}, ${total} total."],
-      "exit": ["Press is booked solid. Can't take it."],
-      "lost": ["Fair enough. Keep us in mind."],
+      "final": [
+        "${price} is our lowest tier price.",
+        "Can't beat ${price} at this quantity.",
+        "${price}, final for this run."
+      ],
+      "accept": [
+        "${price}, booked into the next print run.",
+        "Done at ${price}. Proofs tomorrow.",
+        "${price}. Pressing go."
+      ],
+      "noFee": [
+        "Setup is included at this tier."
+      ],
+      "lieNoFee": [
+        "No setup fee, all included."
+      ],
+      "revealFee": [
+        "Our quote notes: {feeLabel}, ${fee}.",
+        "Since you ask: {feeLabel}, ${fee}."
+      ],
+      "surpriseFee": [
+        "Our final invoice shows: {feeLabel}, ${fee}.",
+        "Before you pay: {feeLabel}, ${fee}."
+      ],
+      "grantLever": [
+        "We'll add {lever}.",
+        "{lever}, done."
+      ],
+      "absorbFee": [
+        "We'll waive it: ${price} plus ${fee}, ${total} total."
+      ],
+      "exit": [
+        "Press is booked solid. Can't take it."
+      ],
+      "lost": [
+        "Fair enough. Keep us in mind."
+      ],
       "tactics": {
-        "tier-pricing": ["Order more and the unit price drops.", "Double the quantity and save 20% per unit."]
+        "tier-pricing": [
+          "Order more and the unit price drops.",
+          "Double the quantity and save 20% per unit."
+        ]
       }
     }
   },
@@ -331,12 +639,30 @@
       "Opening bid ${price} to all three tables. The haggle is on!"
     ],
     "detect": {
-      "false-urgency": ["{name} plays the false-urgency card. The agent ignores the clock.", "{name} says it's almost gone. The agent isn't buying it."],
-      "phantom-buyer": ["{name} invents a rival buyer. Bluff detected.", "A 'mystery buyer' at {name}'s table? The agent calls the bluff."],
-      "hidden-fee": ["{name} was hiding a fee. Caught.", "Fine print alert at {name}'s table!"],
-      "teaser-price": ["{name}'s cheap price hides a pricey renewal. Flagged.", "Teaser price spotted at {name}'s table."],
-      "overpromise": ["{name} promises the moon. The agent notes the risk.", "Big promises from {name}. The agent checks the reviews."],
-      "upsell": ["{name} pushes the premium bundle. The agent stays on target.", "Upsell attempt from {name}!"]
+      "false-urgency": [
+        "{name} plays the false-urgency card. The agent ignores the clock.",
+        "{name} says it's almost gone. The agent isn't buying it."
+      ],
+      "phantom-buyer": [
+        "{name} invents a rival buyer. Bluff detected.",
+        "A 'mystery buyer' at {name}'s table? The agent calls the bluff."
+      ],
+      "hidden-fee": [
+        "{name} was hiding a fee. Caught.",
+        "Fine print alert at {name}'s table!"
+      ],
+      "teaser-price": [
+        "{name}'s cheap price hides a pricey renewal. Flagged.",
+        "Teaser price spotted at {name}'s table."
+      ],
+      "overpromise": [
+        "{name} promises the moon. The agent notes the risk.",
+        "Big promises from {name}. The agent checks the reviews."
+      ],
+      "upsell": [
+        "{name} pushes the premium bundle. The agent stays on target.",
+        "Upsell attempt from {name}!"
+      ]
     },
     "leverage": [
       "The agent uses the best offer on the table against {name}.",
@@ -348,17 +674,46 @@
       "{name} matches at ${price}! The squeeze is working.",
       "Price war! {name} goes to ${price}."
     ],
-    "event": ["Twist! {text}", "Breaking: {text}", "Plot twist: {text}"],
+    "event": [
+      "Twist! {text}",
+      "Breaking: {text}",
+      "Plot twist: {text}"
+    ],
     "deal": [
       "Done with {name} at ${price}, {saved}% under the typical price.",
       "Sold! {name} at ${price}, saving {saved}%.",
       "Handshake with {name}: ${price}, {saved}% below typical."
     ],
-    "dealFair": ["Done with {name} at ${price}. A fair price, not a steal.", "{name} at ${price}. Market price, no drama."],
-    "walkAway": ["The agent walks away. No deal beats a bad deal.", "Walk-away! The agent keeps the money in your pocket."],
-    "rogue": ["Uh-oh. The agent was talked into an upsell. Will the money move?", "The agent took the bait! Over to AgentGuard…"],
-    "surprise": ["{name} sneaks a ${fee} fee in at checkout!", "Surprise ${fee} fee from {name}!"],
-    "absorbed": ["{name} swallows the fee to save the sale. Nice recovery!", "The agent forces {name} to eat the fee!"],
-    "rejectFee": ["The agent cancels: {name}'s real price is over the line.", "Deal off with {name}. Hidden fees don't fly."]
+    "dealFair": [
+      "Done with {name} at ${price}. A fair price, not a steal.",
+      "{name} at ${price}. Market price, no drama."
+    ],
+    "walkAway": [
+      "The agent walks away. No deal beats a bad deal.",
+      "Walk-away! The agent keeps the money in your pocket."
+    ],
+    "rogue": [
+      "Uh-oh. The agent was talked into an upsell. Will the money move?",
+      "The agent took the bait! Over to AgentGuard…"
+    ],
+    "surprise": [
+      "{name} sneaks a ${fee} fee in at checkout!",
+      "Surprise ${fee} fee from {name}!"
+    ],
+    "absorbed": [
+      "{name} swallows the fee to save the sale. Nice recovery!",
+      "The agent forces {name} to eat the fee!"
+    ],
+    "rejectFee": [
+      "The agent cancels: {name}'s real price is over the line.",
+      "Deal off with {name}. Hidden fees don't fly."
+    ],
+    "blocked": [
+      "AgentGuard says no. Zero dollars moved.",
+      "Blocked! The code overruled the persuaded AI. $0 spent."
+    ],
+    "allLeft": [
+      "Every seller left the table. The agent keeps your money."
+    ]
   }
 }

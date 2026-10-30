@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "note": "Item-specific talk mixed into negotiations. pitch: seller selling points. doubt: the agent's reasons to pay less. rebut: seller answers to doubts. small: seller small talk when the deal opens. close: the agent's line when a deal is done. No prices here; the engine adds them.",
+  "items": {
+    "domain-dev": {
+      "pitch": ["Short .dev names are getting rare.", ".dev forces HTTPS, so your demo link looks pro.", "Judges remember a clean domain.", "Instant setup, live in minutes."],
+      "doubt": ["First-year prices are cheap everywhere; renewals are the catch.", "I can register this myself in two clicks.", "It's a one-year project for now.", "Plenty of registrars sell .dev."],
+      "rebut": ["Our renewals are posted upfront.", "We include DNS setup help.", "Two clicks with us too, plus support."],
+      "small": ["Got a name in mind already?", "Building something fun?"],
+      "close": ["Pointing the demo there tonight.", "Perfect, the link goes in the submission."]
+    },
+    "hosting-starter": {
+      "pitch": ["Fast SSD servers, great for demos.", "99.9% uptime during judging week.", "One-click deploy from GitHub.", "Free SSL keeps browsers happy."],
+      "doubt": ["Free tiers exist for small apps.", "I only need it for a few months.", "Renewals at list price add up.", "Traffic will be tiny."],
+      "rebut": ["Free tiers sleep; judges hate a cold start.", "Cancel anytime after the first year.", "Small traffic, big impression."],
+      "small": ["What stack are you running?", "Launching soon?"],
+      "close": ["Deploying the demo now.", "Good, no cold starts during judging."]
+    },
+    "domain-hosting": {
+      "pitch": ["Domain and hosting in one bill.", "DNS is pre-wired, no fiddling.", "SSL included from day one.", "Support that answers at 3am."],
+      "doubt": ["Bundles often hide a big renewal.", "I could buy both separately for less.", "Year two prices worry me.", "I only need it through the hackathon."],
+      "rebut": ["Bundle saves you setup hours.", "We'll lock the renewal if you ask.", "Separate means two support desks."],
+      "small": ["New project?", "Need email on that domain too?"],
+      "close": ["One less thing to set up.", "Great, the demo has a home."]
+    },
+    "ai-credits": {
+      "pitch": ["Credits work across top models.", "No rate limits during your demo.", "Usage dashboard included.", "Pay once, no surprise bills."],
+      "doubt": ["Credits are sold near face value everywhere.", "Unused credits often expire.", "I may not use the full amount.", "Free trial credits exist."],
+      "rebut": ["Ours never expire on this plan.", "Trial credits run out mid-demo.", "Bonus credits on top, if we close."],
+      "small": ["What are you building with AI?", "Agents? Nice."],
+      "close": ["Enough fuel for the agents.", "Good, the agents can talk all week."]
+    },
+    "database-plan": {
+      "pitch": ["Automatic backups every day.", "Scales without downtime.", "Low latency from anywhere.", "Point-in-time restore if you break something."],
+      "doubt": ["Free tiers cover small projects.", "Data transfer fees hide in the bill.", "I only store a few thousand rows.", "Three months is all I need."],
+      "rebut": ["Free tiers pause after a week idle.", "Restore alone saves your demo.", "Transfer is included at this size."],
+      "small": ["Postgres fan?", "What's the data model?"],
+      "close": ["Data's in safe hands.", "Done, backups sorted."]
+    },
+    "email-service": {
+      "pitch": ["Receipts land in the inbox, not spam.", "Clean API, five-minute setup.", "Delivery logs for every message.", "Domain verification help included."],
+      "doubt": ["I'll send maybe a hundred emails.", "Overage fees scare me.", "Free plans exist for low volume.", "It's only for the demo."],
+      "rebut": ["Spam folder kills a demo.", "We'll raise your limit for free.", "Free plans share bad IP reputations."],
+      "small": ["Transactional or marketing?", "Sending receipts?"],
+      "close": ["Receipts will look professional.", "Good, no spam-folder surprises."]
+    },
+    "uptime-monitor": {
+      "pitch": ["Alerts within 30 seconds.", "Public status page included.", "SMS alerts when you're asleep.", "Checks from five regions."],
+      "doubt": ["Basic monitoring is free elsewhere.", "I'll be watching it myself.", "It's one small site.", "A year is longer than I need."],
+      "rebut": ["You'll sleep, the monitor won't.", "A status page looks great to judges.", "SMS beats checking your phone hourly."],
+      "small": ["When does judging start?", "Big launch coming?"],
+      "close": ["Now I'll know before the judges do.", "Peace of mind, booked."]
+    },
+    "pro-inbox": {
+      "pitch": ["Looks professional on every email.", "Custom aliases for team roles.", "Works with any mail app.", "Spam filtering included."],
+      "doubt": ["A free address works for a hackathon.", "Renewals often jump.", "I only need one inbox.", "Storage needs are tiny."],
+      "rebut": ["Judges notice a real address.", "Aliases look like a bigger team.", "Renewal is listed in the quote."],
+      "small": ["Team address or personal?", "Want hello@ or team@?"],
+      "close": ["Professional from the first email.", "Inbox ready for sponsor replies."]
+    },
+    "ui-template": {
+      "pitch": ["Fifty polished screens out of the box.", "Dark mode included.", "Built for React and Tailwind.", "Figma files match the code."],
+      "doubt": ["Free templates look similar.", "I'll customise most of it anyway.", "Commercial use costs extra.", "I only need a few screens."],
+      "rebut": ["Free ones look free; judges can tell.", "Customising ours takes hours, not days.", "License covers a hackathon fine."],
+      "small": ["What's the vibe? Dark, light?", "Dashboard or landing page?"],
+      "close": ["The app will look finished.", "Great, design time cut in half."]
+    },
+    "icon-set": {
+      "pitch": ["Two thousand icons, one consistent style.", "Editable SVGs.", "Pixel-perfect at every size.", "Works in Figma and code."],
+      "doubt": ["Open-source icon sets are free.", "I need maybe twenty icons.", "Attribution rules are annoying.", "Extended licenses cost too much."],
+      "rebut": ["Free sets clash; ours match.", "No attribution with this license.", "Twenty now, two hundred later."],
+      "small": ["Outline or filled style?", "Building a dashboard?"],
+      "close": ["Icons sorted.", "Consistent look, done."]
+    },
+    "stock-video": {
+      "pitch": ["4K clips, colour-graded.", "Cleared for commercial use.", "Fits tech and startup stories.", "Instant download."],
+      "doubt": ["Free stock sites have similar clips.", "I need only a few seconds of each.", "One-project licenses are limiting.", "I'll mostly show screen recordings."],
+      "rebut": ["Free clips show up in every video.", "Unique b-roll makes demos memorable.", "License covers the hackathon video."],
+      "small": ["What's the video about?", "Need city shots or office?"],
+      "close": ["The video just got cinematic.", "B-roll ready."]
+    },
+    "font-license": {
+      "pitch": ["A typeface nobody else is using.", "All weights for headings and body.", "Optimised web files.", "Variable font support."],
+      "doubt": ["Google Fonts are free.", "Pageview caps are a trap.", "I need two weights at most.", "App embedding costs more."],
+      "rebut": ["Free fonts make every app look the same.", "Your traffic won't touch the cap.", "Two weights now, more when you launch."],
+      "small": ["Serif or sans?", "What's the brand feel?"],
+      "close": ["The brand has a voice now.", "Typography sorted."]
+    },
+    "music-track": {
+      "pitch": ["Upbeat, builds to a drop at 2:30.", "Cleared for YouTube.", "Stems included for editing.", "Royalty-free forever."],
+      "doubt": ["Free music libraries exist.", "YouTube claims scare me.", "I need under three minutes.", "Monetisation tiers cost extra."],
+      "rebut": ["Free tracks get claimed constantly.", "Pre-cleared means no claims.", "The drop fits a demo reveal perfectly."],
+      "small": ["Energetic or chill?", "Where's the big reveal in your video?"],
+      "close": ["The demo has a soundtrack.", "Perfect for the reveal moment."]
+    },
+    "illustration-pack": {
+      "pitch": ["Characters with personality.", "Recolourable to your brand.", "Scenes for empty states.", "SVG and PNG included."],
+      "doubt": ["Free illustration sites exist.", "I need maybe five images.", "Recolouring is easy myself.", "They might look generic."],
+      "rebut": ["Ours aren't on every startup site.", "We'll recolour them for you.", "Five now, a full brand later."],
+      "small": ["Cute or serious?", "Characters for the sellers?"],
+      "close": ["The sellers have faces now.", "Illustrations sorted."]
+    },
+    "deck-template": {
+      "pitch": ["Investor-grade layouts.", "Editable charts.", "Works in Keynote and Google Slides.", "Thirty slide types."],
+      "doubt": ["Free deck templates are everywhere.", "I need eight slides.", "The video matters more than slides.", "I'll redesign half of it."],
+      "rebut": ["Eight great slides beat thirty bad ones.", "Charts alone save an evening.", "Judges screenshot good slides."],
+      "small": ["Pitching after the hackathon?", "Investor deck or demo deck?"],
+      "close": ["Pitch slides sorted.", "The story has a shape now."]
+    },
+    "device-mockups": {
+      "pitch": ["Latest phones and laptops.", "Drop in a screenshot, done.", "Animated versions for video.", "Realistic shadows."],
+      "doubt": ["Free mockup generators exist.", "I need two devices.", "Static screenshots work fine.", "I'll only use them once."],
+      "rebut": ["Animated mockups make videos pop.", "Free ones watermark.", "Two devices, ten angles."],
+      "small": ["Mobile-first app?", "Showing it on a laptop?"],
+      "close": ["The app looks real on a phone.", "Mockups ready for the video."]
+    },
+    "usb-mic": {
+      "pitch": ["Cardioid capsule, kills room echo.", "Plug and play, no drivers.", "Studio sound for your voice-over.", "Sturdy metal body."],
+      "doubt": ["Budget mics pick up keyboard noise.", "My headset mic might be enough.", "Reviews say the stand wobbles.", "I'll only record one video."],
+      "rebut": ["Cardioid means no keyboard noise.", "Headset mics sound like a call centre.", "Judges stop watching bad audio."],
+      "small": ["Recording a demo?", "Podcast or video?"],
+      "close": ["Voice-over will sound clean.", "Audio sorted for the demo."]
+    },
+    "webcam": {
+      "pitch": ["Sharp 1080p, even in low light.", "Auto-focus that keeps up.", "Built-in privacy shutter.", "Wide angle for two people."],
+      "doubt": ["My laptop camera works.", "Low-light claims are always optimistic.", "I'll be on screen for 20 seconds.", "Shipping takes time."],
+      "rebut": ["Laptop cams look grainy on YouTube.", "Twenty seconds is your first impression.", "Ships tomorrow."],
+      "small": ["On camera for the pitch?", "Solo or with the team?"],
+      "close": ["Face-cam will look sharp.", "Camera sorted."]
+    },
+    "ring-light": {
+      "pitch": ["Even light, no harsh shadows.", "Three colour temperatures.", "Phone holder included.", "USB powered."],
+      "doubt": ["A desk lamp could do.", "Cheap ring lights flicker on camera.", "I'll record in daylight.", "It's bulky to store."],
+      "rebut": ["Ours runs flicker-free.", "Daylight changes every minute.", "Folds flat."],
+      "small": ["Recording at night?", "Small room?"],
+      "close": ["Lighting sorted.", "No more shadow face."]
+    },
+    "green-screen": {
+      "pitch": ["Wrinkle-resistant fabric.", "Pops up in seconds.", "Even green for clean keying.", "Fits behind a chair."],
+      "doubt": ["Software background removal is free.", "Oversize shipping costs extra.", "My wall is plain enough.", "I'll use it once."],
+      "rebut": ["Software blurs your hair.", "Clean key, pro result.", "Folds into a small bag."],
+      "small": ["Fancy backgrounds planned?", "Small space?"],
+      "close": ["Background magic sorted.", "Clean keys for the video."]
+    },
+    "mic-arm": {
+      "pitch": ["Holds the mic out of frame.", "Smooth, silent joints.", "Clamps to any desk.", "Cable channels built in."],
+      "doubt": ["The mic stand works fine.", "Cheap arms sag.", "My desk is thick.", "It's just a stand."],
+      "rebut": ["Ours holds position, guaranteed.", "Clamp fits desks up to 6 cm.", "Out of frame looks pro."],
+      "small": ["What mic are you using?", "Clean desk setup?"],
+      "close": ["Mic out of frame.", "Desk setup sorted."]
+    },
+    "usb-c-hub": {
+      "pitch": ["HDMI 4K, three USB ports.", "Power passthrough.", "Aluminium, stays cool.", "Works with every laptop."],
+      "doubt": ["Hubs are cheap everywhere.", "Cheap hubs overheat.", "I need two ports.", "My laptop has enough ports."],
+      "rebut": ["Ours runs cool under load.", "Mic, camera and screen add up fast.", "Two-year warranty."],
+      "small": ["Running a second screen?", "Laptop only?"],
+      "close": ["Ports sorted.", "Everything plugs in now."]
+    },
+    "headphones": {
+      "pitch": ["Noise cancelling for deep focus.", "Thirty-hour battery.", "Comfortable for all-nighters.", "Clear mic for calls."],
+      "doubt": ["Mid-range models are close in quality.", "I have earbuds.", "Restocking fees on returns are steep.", "Noise cancelling claims vary."],
+      "rebut": ["Earbuds hurt after hour five.", "Try them, you'll keep them.", "Thirty hours lasts the whole hackathon."],
+      "small": ["Long build nights ahead?", "Noisy flat?"],
+      "close": ["Focus mode on.", "Silence for the final push."]
+    },
+    "portable-monitor": {
+      "pitch": ["15.6-inch IPS, sharp text.", "One USB-C cable.", "Weighs less than a book.", "Fold-out stand."],
+      "doubt": ["Prices on these drop fast.", "Cheap panels have dead pixels.", "I can code on one screen.", "Restocking fee if I return it."],
+      "rebut": ["Dead pixel guarantee.", "Two screens doubles your speed.", "Stand and sleeve included."],
+      "small": ["Coding on the go?", "Need it for testing?"],
+      "close": ["Two screens, double speed.", "Second screen sorted."]
+    },
+    "laptop-stand": {
+      "pitch": ["Camera at eye level.", "Six heights.", "Folds flat.", "Aluminium, cools the laptop."],
+      "doubt": ["A stack of books works.", "Cheap stands wobble.", "I'll use it during recording only.", "Shipping costs more than it's worth."],
+      "rebut": ["Books don't adjust.", "Ours is rock solid.", "Your neck will thank you."],
+      "small": ["Long sessions at the desk?", "Recording at the desk?"],
+      "close": ["Eye level, finally.", "Posture sorted."]
+    },
+    "video-editor": {
+      "pitch": ["I cut 3-minute demos that judges finish.", "Captions, music and motion included.", "Two revisions built in.", "Delivery before your deadline."],
+      "doubt": ["Freelance editing rates vary wildly.", "I can edit basic cuts myself.", "Revisions get billed separately elsewhere.", "Deadline risk worries me."],
+      "rebut": ["A tight edit is the difference between top 10 and top 3.", "Revisions are included with me.", "I deliver a day early."],
+      "small": ["What's the story of the demo?", "Do you have raw footage yet?"],
+      "close": ["Footage coming your way tonight.", "The demo video is in good hands."]
+    },
+    "logo-designer": {
+      "pitch": ["Three concepts to choose from.", "Source files included.", "A mark that works tiny and huge.", "Brand colours included."],
+      "doubt": ["Logo generators are almost free.", "Source files often cost extra.", "I need something simple.", "Revisions can drag on."],
+      "rebut": ["Generators make generic marks.", "Simple is hardest; that's my job.", "Two revision rounds included."],
+      "small": ["Any style you love?", "What should the brand feel like?"],
+      "close": ["Infinity Bazaar gets a face.", "Logo sorted."]
+    },
+    "copywriter": {
+      "pitch": ["Words that make judges nod.", "Landing page plus Devpost write-up.", "Clear, no buzzwords.", "Fast turnaround."],
+      "doubt": ["I can write it myself with AI.", "Rates per page are steep.", "It's one page.", "Revisions add up."],
+      "rebut": ["AI drafts sound like AI.", "One page is your first impression.", "One revision included."],
+      "small": ["Who's the audience?", "What's the one-line pitch?"],
+      "close": ["The story will read well.", "Copy sorted."]
+    },
+    "pitch-coach": {
+      "pitch": ["I've coached winning demo teams.", "We'll tighten your story to 3 minutes.", "Feedback on delivery and slides.", "Follow-up review included."],
+      "doubt": ["Free pitch guides exist.", "An hour won't change much.", "Coaching rates vary a lot.", "I mostly need a good video."],
+      "rebut": ["One hour fixes the first 20 seconds.", "Story matters more than features.", "A follow-up review is included."],
+      "small": ["When's the deadline?", "Who's presenting?"],
+      "close": ["Story will hit harder.", "Pitch practice booked."]
+    },
+    "voiceover": {
+      "pitch": ["Warm, clear narration.", "One free retake.", "Studio-quality audio.", "24-hour delivery available."],
+      "doubt": ["AI voices are nearly free.", "I can narrate myself.", "Usage fees can pop up.", "Three minutes isn't long."],
+      "rebut": ["Judges can hear an AI voice.", "A pro voice adds credibility.", "Usage for a hackathon is included."],
+      "small": ["Got a script?", "Energetic or calm?"],
+      "close": ["The demo has a voice.", "Narration sorted."]
+    },
+    "ux-review": {
+      "pitch": ["I'll find the confusing bits fast.", "Recorded walkthrough of every issue.", "Prioritised fix list.", "A second review after fixes."],
+      "doubt": ["I can ask friends to test.", "One review might be enough.", "Rates vary a lot.", "The app is small."],
+      "rebut": ["Friends are too nice.", "Small apps need clarity most.", "The fix list is prioritised."],
+      "small": ["What screens matter most?", "Who are your users?"],
+      "close": ["Fresh eyes booked.", "UX feedback incoming."]
+    },
+    "motion-intro": {
+      "pitch": ["Ten seconds that set the tone.", "Sound effect included.", "Vertical version for social.", "Matches your brand."],
+      "doubt": ["Templates do this for free.", "Ten seconds is short.", "It eats into the 3 minutes.", "Revisions cost extra."],
+      "rebut": ["Templates look like templates.", "Five seconds is enough; I'll make it count.", "Vertical cut for social included."],
+      "small": ["Got a logo yet?", "Where's it going to play?"],
+      "close": ["The video opens with a bang.", "Intro sorted."]
+    },
+    "qa-tester": {
+      "pitch": ["I break things before judges do.", "Testing on real phones.", "Written bug report.", "Reproduction steps for every bug."],
+      "doubt": ["I'll test it myself.", "One day may not be enough.", "Rates vary.", "It's a small app."],
+      "rebut": ["Builders miss their own bugs.", "A day covers every main flow.", "Bug report included."],
+      "small": ["Which devices matter?", "Any known bugs?"],
+      "close": ["Bugs beware.", "Testing booked."]
+    },
+    "pizza": {
+      "pitch": ["Wood-fired, delivered hot.", "Vegetarian options.", "Free drinks with four larges.", "Delivered in 30 minutes."],
+      "doubt": ["Delivery fees add up.", "Supermarket pizza is cheaper.", "We could cook.", "Four larges might be too much."],
+      "rebut": ["Cooking eats an hour of build time.", "Leftovers are breakfast.", "Free drinks offset the fees."],
+      "small": ["Late night coding?", "How many hungry devs?"],
+      "close": ["Fuel for the all-nighter.", "Pizza's on its way."]
+    },
+    "energy-drinks": {
+      "pitch": ["Cold and delivered.", "Sugar-free options.", "Twelve-pack for the team.", "Fast delivery."],
+      "doubt": ["Supermarkets sell these cheaper.", "We have coffee.", "Twelve might be too many.", "Delivery fees for drinks?"],
+      "rebut": ["Delivered cold, no trip.", "Coffee crashes at 3am.", "Four extra cans if we close."],
+      "small": ["Long night ahead?", "Team of four?"],
+      "close": ["Caffeine sorted.", "Final-push fuel delivered."]
+    },
+    "hoodies": {
+      "pitch": ["Heavyweight cotton.", "Front and back print.", "Looks great in team photos.", "Sizes for everyone."],
+      "doubt": ["Print setup fees are a trap.", "Four hoodies is a small run.", "Rush production costs more.", "T-shirts are cheaper."],
+      "rebut": ["Team photos travel on social.", "Setup waived on bigger orders.", "Hoodies get worn for years."],
+      "small": ["Team colours?", "Logo ready?"],
+      "close": ["Team photo will look sharp.", "Hoodies in the print queue."]
+    },
+    "stickers": {
+      "pitch": ["Die-cut, weatherproof vinyl.", "Matte or glossy.", "Ready in five days.", "Laptop-ready size."],
+      "doubt": ["Die setup fees add up.", "A hundred is a lot.", "Cheap stickers peel.", "We don't have a booth."],
+      "rebut": ["Ours don't peel.", "Fifty extra if we close.", "Stickers are the best giveaway."],
+      "small": ["Laptop stickers?", "Giving them to judges?"],
+      "close": ["Stickers for every laptop.", "Swag sorted."]
+    },
+    "coffee": {
+      "pitch": ["Roasted this week.", "Ground to your brewer.", "Single origin, chocolatey.", "Delivered tomorrow."],
+      "doubt": ["Supermarket coffee works.", "A kilo is a lot.", "Specialty prices are steep.", "We have instant."],
+      "rebut": ["Fresh beans beat instant at 2am.", "A kilo lasts the whole hackathon.", "Ground to order, free."],
+      "small": ["Espresso or filter?", "Coffee team or tea team?"],
+      "close": ["Good coffee, better code.", "Beans on the way."]
+    },
+    "cowork-pass": {
+      "pitch": ["Quiet rooms for recording.", "Fast Wi-Fi.", "Unlimited coffee.", "Open late."],
+      "doubt": ["We can work from home.", "Day passes add up.", "We need it one day.", "Cafes are free."],
+      "rebut": ["Cafes are loud for recording.", "Meeting room hour included.", "Fast Wi-Fi for uploads."],
+      "small": ["Recording day?", "Need a meeting room?"],
+      "close": ["Quiet room for the video.", "Workspace booked."]
+    },
+    "cake": {
+      "pitch": ["Baked fresh that morning.", "Custom message on top.", "Chocolate or vanilla.", "Delivered on time."],
+      "doubt": ["Supermarket cake is cheaper.", "Custom text costs extra.", "We might not win.", "Delivery fees again."],
+      "rebut": ["Submitting is worth celebrating.", "Custom text on the house.", "Delivered right after you submit."],
+      "small": ["What are we celebrating?", "What should it say?"],
+      "close": ["Celebration sorted.", "Cake for the submission party."]
+    }
+  }
+}

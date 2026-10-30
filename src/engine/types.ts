@@ -15,6 +15,8 @@ export interface Lever {
 export interface CatalogItem {
   id: string;
   name: string;
+  /** How the item reads mid-sentence, e.g. "a USB microphone". */
+  phrase: string;
   group: GroupId;
   unit: string;
   description: string;
@@ -104,6 +106,8 @@ export interface Seller {
   leverAsked: boolean;
   upsellPrice: number | null;
   usedTactics: string[];
+  /** Price this seller has agreed to, if they accepted an offer. */
+  agreedAt: number | null;
 }
 
 export interface BuyerPlan {
@@ -119,7 +123,7 @@ export type Beat =
       kind: "agent";
       round: number;
       to: string[];
-      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee";
+      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee" | "decline" | "explain" | "priced-out";
       price?: number;
       refPrice?: number;
       text: string;
@@ -128,7 +132,7 @@ export type Beat =
       kind: "seller";
       round: number;
       sellerId: string;
-      move: "counter" | "final" | "accept" | "reveal-fee" | "no-fee" | "grant-lever" | "tactic" | "exit" | "surprise-fee" | "absorb-fee";
+      move: "counter" | "final" | "accept" | "reveal-fee" | "no-fee" | "grant-lever" | "tactic" | "exit" | "surprise-fee" | "absorb-fee" | "lost";
       price?: number;
       tactic?: string;
       lever?: Lever;
@@ -152,7 +156,7 @@ export interface DealOutcome {
   surpriseFee?: boolean;
   /** Extras won instead of a lower price. */
   levers: Lever[];
-  /** price + all known fees - value of levers won. Used to compare sellers. */
+  /** price + fee now + later fee: what the deal really costs. */
   effectiveCost?: number;
   /** Amount PayPal is asked to move: price + fee. */
   amountToPay?: number;
