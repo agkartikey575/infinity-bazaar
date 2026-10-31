@@ -6,7 +6,7 @@
   "description": "AI agents negotiate with AI sellers and pay through PayPal, inside rules a human sets.",
   "license": "MIT",
   "engines": {
-    "node": ">=22.18"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
