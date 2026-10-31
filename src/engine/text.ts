@@ -12,6 +12,7 @@ interface SellerLines {
   noFee: Lines;
   lieNoFee: Lines;
   revealFee: Lines;
+  revealTerm: Lines;
   surpriseFee: Lines;
   grantLever: Lines;
   absorbFee: Lines;

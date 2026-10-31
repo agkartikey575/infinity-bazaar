@@ -222,6 +222,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "desperate-startup": {
@@ -278,6 +282,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "upseller": {
@@ -340,6 +348,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "big-brand": {
@@ -399,6 +411,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "reseller": {
@@ -448,6 +464,10 @@
       "tactics": {},
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "pro-freelancer": {
@@ -506,6 +526,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "volume-studio": {
@@ -564,6 +588,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "student-freelancer": {
@@ -618,6 +646,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "friendly-local": {
@@ -672,6 +704,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     },
     "bulk-merch": {
@@ -726,6 +762,10 @@
       },
       "partialAbsorb": [
         "I'll take ${cut} off: ${price} plus ${fee}, ${total} total. That's all I can do."
+      ],
+      "revealTerm": [
+        "One condition, to be clear: {feeLabel}.",
+        "Just so you know: {feeLabel}."
       ]
     }
   },
