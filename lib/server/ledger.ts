@@ -3,8 +3,9 @@
 //
 // What it guarantees: amounts, lines and states can't be edited, and a ledger
 // can't be moved to another run. What it doesn't: an older copy of the same
-// run's ledger can be sent again. Per-line PayPal request ids still stop any
-// line being paid twice; the budget is enforced per run.
+// run's ledger can be sent again. That can't overspend: per-line PayPal request
+// and invoice ids stop any line being paid twice, and the server counts every
+// line the ledger doesn't prove unpaid as spent (see spentBefore in agent.ts).
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** A run is a deterministic table plus a random nonce chosen each time you press Play. */
@@ -20,6 +21,8 @@ export interface LedgerEntry {
   captureId?: string;
   /** Attempts at the approval step; a declined wallet gets a fresh request id. */
   attempt?: number;
+  /** PayPal accepted the payment but is still reviewing it. */
+  review?: boolean;
 }
 
 export interface Ledger {

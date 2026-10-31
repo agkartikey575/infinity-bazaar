@@ -4,12 +4,14 @@
 import { checkPayment, getItem, type GuardDecision } from "../../src/engine/index.ts";
 import { toCents, toValue, type Cents } from "../money.ts";
 import { buildMissionRun, buildSingleRun, type Run } from "../timeline.ts";
-import { committedCents, transition, type Ledger, type LedgerEntry, type RunRef } from "./ledger.ts";
+import { transition, type Ledger, type LedgerEntry, type RunRef } from "./ledger.ts";
 import { approveLink, paymentIds, paymentSucceeded, PayPalClient, PayPalError, type Order } from "./paypal.ts";
 
 export interface LogRow {
   /** What happened, in plain words, as shown in the payment panel. */
   text: string;
+  /** How the row is coloured: money moved or held (ok), waiting on someone (ask), stopped (bad). */
+  tone?: "ok" | "ask" | "bad";
   /** The PayPal API call behind it, shown only with "Show PayPal details". */
   detail?: string;
   debugId?: string | null;
@@ -21,7 +23,7 @@ export type PayResult =
   | { decision: "block"; guard: GuardDecision; ledger: Ledger; log: LogRow[] }
   | { decision: "ask_user"; guard: GuardDecision; ledger: Ledger; log: LogRow[] }
   | { decision: "needs_paypal_approval"; guard: GuardDecision; ledger: Ledger; log: LogRow[]; orderId: string; approveUrl: string }
-  | { decision: "paid"; state: "captured" | "authorized"; guard: GuardDecision; ledger: Ledger; log: LogRow[] }
+  | { decision: "paid"; state: "captured" | "authorized"; review?: boolean; guard: GuardDecision; ledger: Ledger; log: LogRow[] }
   | { decision: "declined"; guard: GuardDecision; ledger: Ledger; log: LogRow[] };
 
 export function rebuildRun(ref: RunRef): Run {
@@ -51,11 +53,38 @@ function lineFor(run: Run, line: number) {
   return { l, o, item: getItem(l.itemId) };
 }
 
+const COMMITTED = new Set(["pending_approval", "authorized", "captured"]);
+const NO_SPEND = new Set(["declined", "blocked", "voided"]);
+
+/**
+ * What the budget must already cover before paying `line`, in cents.
+ *
+ * The browser holds the signed ledger, so it could send an older copy or none
+ * at all. The server therefore never trusts a missing entry: every earlier line
+ * with a deal counts as spent unless the ledger proves it ended without money
+ * moving. If the whole run could ever exceed the budget, later lines count too,
+ * so lines paid out of order can't slip past the budget either.
+ */
+export function spentBefore(run: Run, line: number, ledger: Ledger): number {
+  const budget = toCents(run.lines[line].rules.budgetUsd);
+  const dealCents: number[] = run.lines.map((l) => (l.deal.outcome.status === "deal" && l.deal.outcome.amountToPay !== undefined ? toCents(l.deal.outcome.amountToPay) : 0));
+  const worstCase = dealCents.reduce((a, b) => a + b, 0) > budget;
+  let cents = 0;
+  run.lines.forEach((_, j) => {
+    if (j === line) return;
+    const e = ledger.entries[j];
+    if (e && COMMITTED.has(e.state)) cents += e.amountCents;
+    else if (e && NO_SPEND.has(e.state)) return;
+    else if (j < line || worstCase) cents += dealCents[j];
+  });
+  return cents;
+}
+
 /** AgentGuard, run on the server against the ledger. */
 export function guardLine(run: Run, line: number, ledger: Ledger): { guard: GuardDecision; amount: Cents } {
   const { l, o, item } = lineFor(run, line);
   const own = ledger.entries[line];
-  const spent = committedCents(ledger) - (own?.state === "pending_approval" ? own.amountCents : 0);
+  const spent = spentBefore(run, line, ledger);
   const guard = checkPayment({
     amount: o.amountToPay!,
     currency: "USD",
@@ -81,16 +110,24 @@ function settleOrder(ledger: Ledger, line: number, amount: number, order: Order,
     return {
       state: "declined" as const,
       ledger: transition(ledger, line, { state: "declined", amountCents: amount, orderId: order.id }),
-      log: [{ text: "PayPal declined the payment. No money moved.", detail: `${label} → payment ${ids.status ?? "missing"}`, debugId }],
+      log: [{ text: "PayPal declined the payment. No money moved.", tone: "bad" as const, detail: `${label} → payment ${ids.status ?? "missing"}`, debugId }],
     };
   }
   const state = intent === "CAPTURE" ? ("captured" as const) : ("authorized" as const);
+  // PENDING: PayPal accepted the payment but is still reviewing it. The money is set aside, not yet paid.
+  const review = ids.status === "PENDING";
   return {
     state,
-    ledger: transition(ledger, line, { state, amountCents: amount, orderId: order.id, captureId: ids.captureId ?? undefined, authorizationId: ids.authorizationId ?? undefined }),
+    review,
+    ledger: transition(ledger, line, { state, amountCents: amount, orderId: order.id, captureId: ids.captureId ?? undefined, authorizationId: ids.authorizationId ?? undefined, ...(review ? { review } : {}) }),
     log: [
       {
-        text: state === "captured" ? `Paid ${usd(amount)}.` : `${usd(amount)} held by PayPal until delivery.`,
+        tone: review ? ("ask" as const) : ("ok" as const),
+        text: review
+          ? `PayPal is reviewing this ${usd(amount)} payment. It counts toward your budget until it clears.`
+          : state === "captured"
+            ? `Paid ${usd(amount)}.`
+            : `${usd(amount)} held by PayPal until delivery.`,
         detail: `${label} → ${ids.status} · ${state === "captured" ? `capture ${ids.captureId}` : `authorization ${ids.authorizationId}`}`,
         debugId,
       },
@@ -110,21 +147,26 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
   const { guard, amount } = guardLine(run, line, ledger);
 
   // Resume: already paid, settled, or an order waiting for the buyer. Never a second order.
-  if (own?.state === "authorized" || own?.state === "captured") return { decision: "paid", state: own.state, guard, ledger, log: [] };
+  if (own?.state === "authorized" || own?.state === "captured") return { decision: "paid", state: own.state, review: own.review, guard, ledger, log: [] };
   if (own?.state === "declined" || own?.state === "voided") return { decision: "declined", guard, ledger, log: [] };
   if (own?.state === "blocked") return { decision: "block", guard, ledger, log: [] };
   if (own?.state === "pending_approval" && own.orderId && ctx.paypal) {
     const cur = await ctx.paypal.getOrder(own.orderId);
+    // Finished on PayPal's side while our reply was lost: record what PayPal says.
+    if (cur.data.status === "COMPLETED") {
+      const s = settleOrder(ledger, line, own.amountCents, cur.data, intentOf(l.itemId), cur.label, cur.debugId);
+      return s.state === "declined" ? { decision: "declined", guard, ledger: s.ledger, log: s.log } : { decision: "paid", state: s.state, review: s.review, guard, ledger: s.ledger, log: s.log };
+    }
     if (cur.data.status === "APPROVED") {
       const done = await complete(ref, line, ledger, ctx.paypal);
       if ("needsApproval" in done) return { decision: "needs_paypal_approval", guard, ledger: done.ledger, log: done.log, orderId: own.orderId, approveUrl: done.approveUrl };
-      return done.state === "declined" ? { decision: "declined", guard, ledger: done.ledger, log: done.log } : { decision: "paid", state: done.state, guard, ledger: done.ledger, log: done.log };
+      return done.state === "declined" ? { decision: "declined", guard, ledger: done.ledger, log: done.log } : { decision: "paid", state: done.state, review: done.review, guard, ledger: done.ledger, log: done.log };
     }
     const url = approveLink(cur.data.links);
     if (url) return { decision: "needs_paypal_approval", guard, ledger, log: [], orderId: own.orderId, approveUrl: url };
   }
 
-  const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}` }];
+  const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}`, tone: guard.decision === "approve" ? "ok" : guard.decision === "ask_user" ? "ask" : "bad" }];
   if (guard.decision === "block") {
     return { decision: "block", guard, ledger: transition(ledger, line, { state: "blocked", amountCents: amount }), log };
   }
@@ -173,11 +215,21 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     };
   }
 
-  const created = await ctx.paypal.createOrder(order, `${key}:create`);
+  let created;
+  let viaWallet = useVault;
+  try {
+    created = await ctx.paypal.createOrder(order, `${key}:create`);
+  } catch (e) {
+    // The saved wallet was declined: fall back to asking the buyer to approve this one in PayPal.
+    if (!(useVault && e instanceof PayPalError && (e.issue === "INSTRUMENT_DECLINED" || e.issue === "PAYER_ACTION_REQUIRED"))) throw e;
+    log.push({ text: "Your connected wallet was declined for this payment. Approve it in PayPal instead.", tone: "ask", detail: `${e.message}`, debugId: e.debugId });
+    created = await ctx.paypal.createOrder({ ...order, vaultId: undefined }, `${key}:create:buyer`);
+    viaWallet = false;
+  }
   const orderId = created.data.id;
   log.push({
-    text: useVault ? `Paying ${usd(amount)} from your connected PayPal wallet.` : `PayPal order created for ${usd(amount)}.`,
-    detail: `${created.label} · intent ${intent} · $${toValue(amount)}${useVault ? " · vaulted wallet" : ""} → ${created.data.status} · order ${orderId}`,
+    text: viaWallet ? `Paying ${usd(amount)} from your connected PayPal wallet.` : `PayPal order created for ${usd(amount)}.`,
+    detail: `${created.label} · intent ${intent} · $${toValue(amount)}${viaWallet ? " · vaulted wallet" : ""} → ${created.data.status} · order ${orderId}`,
     debugId: created.debugId,
   });
 
@@ -185,7 +237,7 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     const s = settleOrder(ledger, line, amount, created.data, intent, created.label, created.debugId);
     return s.state === "declined"
       ? { decision: "declined", guard, ledger: s.ledger, log: [...log, ...s.log] }
-      : { decision: "paid", state: s.state, guard, ledger: s.ledger, log: [...log, ...s.log] };
+      : { decision: "paid", state: s.state, review: s.review, guard, ledger: s.ledger, log: [...log, ...s.log] };
   }
 
   const approveUrl = approveLink(created.data.links);
@@ -201,7 +253,7 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
 }
 
 export type CompleteResult =
-  | { ledger: Ledger; log: LogRow[]; state: "captured" | "authorized" | "declined" }
+  | { ledger: Ledger; log: LogRow[]; state: "captured" | "authorized" | "declined"; review?: boolean }
   /** Not approved yet, or the wallet was declined: the buyer must approve (again). */
   | { ledger: Ledger; log: LogRow[]; needsApproval: true; approveUrl: string };
 
@@ -220,7 +272,7 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
   } catch (e) {
     if (!(e instanceof PayPalError)) throw e;
     // Already done on PayPal's side (a retry after a lost reply): read the order and record it.
-    if (e.issue === "ORDER_ALREADY_CAPTURED" || e.issue === "ORDER_ALREADY_AUTHORIZED") {
+    if (e.issue === "ORDER_ALREADY_CAPTURED" || e.issue === "ORDER_ALREADY_AUTHORIZED" || e.issue === "DUPLICATE_INVOICE_ID") {
       const cur = await paypal.getOrder(entry.orderId);
       return settleOrder(ledger, line, entry.amountCents, cur.data, intent, cur.label, cur.debugId);
     }
@@ -234,7 +286,7 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
         needsApproval: true,
         approveUrl: url,
         ledger: transition(ledger, line, { state: "pending_approval", amountCents: entry.amountCents, attempt: next }),
-        log: [{ text: e.issue === "INSTRUMENT_DECLINED" ? "PayPal declined that payment method. Choose another in PayPal." : "Not approved in PayPal yet.", debugId: e.debugId }],
+        log: [{ text: e.issue === "INSTRUMENT_DECLINED" ? "PayPal declined that payment method. Choose another in PayPal." : "Not approved in PayPal yet.", tone: "ask", debugId: e.debugId }],
       };
     }
     throw e;
@@ -247,7 +299,7 @@ export function decline(line: number, ledger: Ledger, amountCents: number): Ledg
 }
 
 /** Delivery: the server decides from the deal whether it arrived. Capture the hold, or void it. */
-export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal: PayPalClient | null): Promise<{ ledger: Ledger; log: LogRow[]; state: "captured" | "voided" }> {
+export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal: PayPalClient | null): Promise<{ ledger: Ledger; log: LogRow[]; state: "captured" | "voided"; review?: boolean }> {
   const entry = ledger.entries[line];
   if (entry?.state === "captured" || entry?.state === "voided") return { ledger, log: [], state: entry.state };
   if (!entry || entry.state !== "authorized") throw new Error(`line ${line} has no authorization to settle`);
@@ -260,15 +312,45 @@ export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal:
     return { state, ledger: transition(ledger, line, { state, amountCents: entry.amountCents }), log: [{ text: failed ? "Delivery failed, so the hold was released (demo mode)." : "Delivered and paid (demo mode).", detail: `Simulated ${failed ? "void" : "capture"} of the hold` }] };
   }
   if (!entry.authorizationId) throw new Error(`line ${line} is authorized but has no authorization id`);
+  const voided = (detail: string, debugId: string | null) => ({
+    state: "voided" as const,
+    ledger: transition(ledger, line, { state: "voided", amountCents: entry.amountCents }),
+    log: [{ text: "Delivery failed, so the hold was released. You paid nothing.", detail, debugId }],
+  });
   if (failed) {
-    const res = await paypal.voidAuthorization(entry.authorizationId, `${key}:void`);
-    return { state: "voided", ledger: transition(ledger, line, { state: "voided", amountCents: entry.amountCents }), log: [{ text: "Delivery failed, so the hold was released. You paid nothing.", detail: `${res.label} → VOIDED`, debugId: res.debugId }] };
+    try {
+      const res = await paypal.voidAuthorization(entry.authorizationId, `${key}:void`);
+      return voided(`${res.label} → VOIDED`, res.debugId);
+    } catch (e) {
+      // Already released (a retry after a lost reply): nothing left to do.
+      if (e instanceof PayPalError && e.issue === "AUTHORIZATION_ALREADY_VOIDED") return voided("authorization already voided", e.debugId);
+      throw e;
+    }
   }
-  const res = await paypal.captureAuthorization(entry.authorizationId, `${key}:capture-auth`);
+  let res;
+  try {
+    res = await paypal.captureAuthorization(entry.authorizationId, `${key}:capture-auth`);
+  } catch (e) {
+    // Already captured (a retry after a lost reply): read the authorization's order and record it.
+    if (!(e instanceof PayPalError && (e.issue === "AUTHORIZATION_ALREADY_CAPTURED" || e.issue === "DUPLICATE_INVOICE_ID") && entry.orderId)) throw e;
+    const cur = await paypal.getOrder(entry.orderId);
+    const cap = cur.data.purchase_units?.[0]?.payments?.captures?.[0];
+    if (!cap) throw e;
+    res = { data: { id: cap.id, status: cap.status }, label: cur.label, debugId: cur.debugId };
+  }
   if (!paymentSucceeded(res.data.status)) throw new PayPalError(502, "CAPTURE_NOT_COMPLETED", `capture is ${res.data.status}`, null, res.debugId);
+  const review = res.data.status === "PENDING";
   return {
     state: "captured",
-    ledger: transition(ledger, line, { state: "captured", amountCents: entry.amountCents, captureId: res.data.id }),
-    log: [{ text: `Delivered. ${usd(entry.amountCents)} paid to the seller.`, detail: `${res.label} → ${res.data.status} · capture ${res.data.id}`, debugId: res.debugId }],
+    review,
+    ledger: transition(ledger, line, { state: "captured", amountCents: entry.amountCents, captureId: res.data.id, ...(review ? { review } : {}) }),
+    log: [
+      {
+        text: review ? `Delivered. PayPal is reviewing the ${usd(entry.amountCents)} payment to the seller.` : `Delivered. ${usd(entry.amountCents)} paid to the seller.`,
+        tone: review ? "ask" : "ok",
+        detail: `${res.label} → ${res.data.status} · capture ${res.data.id}`,
+        debugId: res.debugId,
+      },
+    ],
   };
 }

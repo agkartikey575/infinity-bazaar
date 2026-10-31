@@ -3,6 +3,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { readLedger, readValue, signLedger, type Ledger, type RunRef } from "./ledger.ts";
 import { configFromEnv, PayPalClient, PayPalError } from "./paypal.ts";
+import { checkOrigin, HttpError } from "./request.ts";
+
+export { checkOrigin, HttpError };
 
 const KINDS = new Set(["mission", "single", "rogue"]);
 const NONCE = /^[a-z0-9]{8,40}$/;
@@ -19,20 +22,6 @@ export function paypalClient(): PayPalClient | null {
   return client;
 }
 
-export class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-/** Only our own pages may call the payment routes, and only with JSON. */
-export function checkOrigin(req: NextRequest) {
-  const origin = req.headers.get("origin");
-  if (origin && origin !== new URL(req.url).origin) throw new HttpError(403, "Requests must come from this site.");
-  if (!(req.headers.get("content-type") ?? "").includes("application/json")) throw new HttpError(415, "Send JSON.");
-}
 
 export interface AgentBody {
   run: RunRef;
@@ -78,11 +67,18 @@ export function ok(data: Record<string, unknown> & { ledger?: Ledger }) {
   return NextResponse.json({ ...rest, ...(ledger ? { ledger: signLedger(ledger) } : {}) });
 }
 
+/** Errors as JSON. Details stay in the server log; the browser gets a short reason and PayPal's debug id. */
 export function fail(e: unknown) {
   if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
-  if (e instanceof PayPalError) return NextResponse.json({ error: e.message, debugId: e.debugId, issue: e.issue }, { status: 502 });
-  const message = e instanceof Error ? e.message : "Unexpected error";
+  if (e instanceof PayPalError) {
+    console.error("paypal", e.status, e.message, e.debugId);
+    const error = e.issue === "PAYPAL_UNREACHABLE" || e.status === 0 ? "Couldn't reach PayPal." : "PayPal couldn't complete this step.";
+    return NextResponse.json({ error, debugId: e.debugId, issue: e.issue }, { status: 502 });
+  }
+  const message = e instanceof Error ? e.message : String(e);
   // Engine and ledger errors are the caller's fault (a line with no deal, a bad transition).
   const client = /^(no line|line \d+|ledger:|Unknown (catalog item|mission))/.test(message);
-  return NextResponse.json({ error: message }, { status: client ? 409 : 500 });
+  if (client) return NextResponse.json({ error: message }, { status: 409 });
+  console.error("payment route", e);
+  return NextResponse.json({ error: "Something went wrong on our side." }, { status: 500 });
 }

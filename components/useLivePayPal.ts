@@ -26,12 +26,14 @@ type Action = "pay" | "complete" | "deliver";
 
 export interface LiveLine {
   state: LiveState;
-  rows: { text: string; detail?: string; debugId?: string | null }[];
+  rows: { text: string; detail?: string; tone?: "ok" | "ask" | "bad"; debugId?: string | null }[];
   approveUrl?: string;
   error?: string;
   /** What to repeat when you press Retry. */
   failed?: Action;
   userApproved?: boolean;
+  /** PayPal accepted the payment but is still reviewing it: not shown as paid yet. */
+  review?: boolean;
 }
 
 interface Status {
@@ -144,7 +146,7 @@ export function useLivePayPal(run: RunRef) {
     async (line: number) => {
       const c = await post("/api/agent/complete", line);
       if (c.needsApproval) return set(line, { state: "needs-click", approveUrl: c.approveUrl, rows: c.log });
-      set(line, { state: c.state, rows: c.log });
+      set(line, { state: c.state, review: c.review === true, rows: c.log });
     },
     [post],
   );
@@ -152,13 +154,13 @@ export function useLivePayPal(run: RunRef) {
   const approveInWindow = useCallback(
     async (line: number, url: string, win: Window | null) => {
       const w = win ?? window.open(url, "paypal", POPUP);
-      if (!w) return set(line, { state: "needs-click", approveUrl: url, rows: [{ text: BLOCKED }] });
+      if (!w) return set(line, { state: "needs-click", approveUrl: url, rows: [{ text: BLOCKED, tone: "ask" }] });
       if (win) w.location.href = url;
-      set(line, { state: "waiting-paypal", approveUrl: url, rows: [{ text: "Waiting for your approval in the PayPal window…" }] });
+      set(line, { state: "waiting-paypal", approveUrl: url, rows: [{ text: "Waiting for your approval in the PayPal window…", tone: "ask" }] });
       const r = await waitForReturn(w, "order", line);
       if (r.how === "cancelled") {
         const d = await post("/api/agent/decline", line);
-        return set(line, { state: "declined", rows: [{ text: "You cancelled in PayPal." }, ...d.log] });
+        return set(line, { state: "declined", rows: [{ text: "You cancelled in PayPal.", tone: "bad" }, ...d.log] });
       }
       // Returned or just closed: the server checks with PayPal whether it was approved.
       await finish(line);
@@ -184,7 +186,7 @@ export function useLivePayPal(run: RunRef) {
         if (r.decision === "ask_user") return set(line, { state: "needs-decision" });
         if (r.decision === "block") return set(line, { state: "blocked" });
         if (r.decision === "declined") return set(line, { state: "declined" });
-        set(line, { state: r.state });
+        set(line, { state: r.state, review: r.review === true });
       }).catch(() => win?.close()),
     [guarded, post, approveInWindow],
   );
@@ -195,7 +197,7 @@ export function useLivePayPal(run: RunRef) {
       const url = lines[line]?.approveUrl;
       if (!url) return;
       const win = window.open(url, "paypal", POPUP);
-      if (!win) return set(line, { state: "needs-click", rows: [{ text: BLOCKED }] });
+      if (!win) return set(line, { state: "needs-click", rows: [{ text: BLOCKED, tone: "ask" }] });
       guarded(line, "complete", () => approveInWindow(line, url, win));
     },
     [lines, guarded, approveInWindow],
@@ -206,7 +208,7 @@ export function useLivePayPal(run: RunRef) {
       guarded(line, "deliver", async () => {
         set(line, { state: "working" });
         const d = await post("/api/agent/deliver", line);
-        set(line, { state: d.state, rows: d.log });
+        set(line, { state: d.state, review: d.review === true, rows: d.log });
       }),
     [guarded, post],
   );

@@ -3,7 +3,9 @@
 // reuse the same request id.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { complete, deliver, guardLine, lineKey, pay, rebuildRun } from "../lib/server/agent.ts";
+import { complete, deliver, guardLine, lineKey, pay, rebuildRun, spentBefore } from "../lib/server/agent.ts";
+import { checkOrigin } from "../lib/server/request.ts";
+import { getItem } from "../src/engine/index.ts";
 import { committedCents, emptyLedger, readLedger, readValue, signLedger, signValue, transition, type RunRef } from "../lib/server/ledger.ts";
 import { PayPalClient } from "../lib/server/paypal.ts";
 import { toCents, toValue } from "../lib/money.ts";
@@ -11,7 +13,7 @@ import { toCents, toValue } from "../lib/money.ts";
 const SECRET = "test-secret";
 
 /** A fake PayPal that records calls and answers like the sandbox does. */
-function fakePayPal(opts: { completeOnCreate?: boolean; captureStatus?: string; failComplete?: string; omitAuthId?: boolean } = {}) {
+function fakePayPal(opts: { completeOnCreate?: boolean; captureStatus?: string; failComplete?: string; omitAuthId?: boolean; declineVault?: boolean; orderStatus?: string; hangFirst?: boolean; rateLimitFirst?: boolean } = {}) {
   const calls: { method: string; path: string; requestId: string | null; body: any }[] = [];
   const orders = new Map<string, string>();
   const fetchFn = async (url: string | URL | Request, init?: RequestInit) => {
@@ -21,6 +23,18 @@ function fakePayPal(opts: { completeOnCreate?: boolean; captureStatus?: string; 
     calls.push({ method: init?.method ?? "GET", path: u.pathname, requestId: headers.get("PayPal-Request-Id"), body });
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "paypal-debug-id": "dbg1" } });
     if (u.pathname === "/v1/oauth2/token") return json({ access_token: "tok", expires_in: 3600 });
+    const writes = calls.filter((c) => c.method === "POST" && c.path === u.pathname).length;
+    if (opts.hangFirst && u.pathname === "/v2/checkout/orders" && writes === 1) {
+      // Hangs until the client's timeout aborts it (the timer keeps the test process alive meanwhile).
+      return new Promise<Response>((_, reject) => {
+        const keep = setTimeout(() => reject(new Error("client never timed out")), 2000);
+        init?.signal?.addEventListener("abort", () => (clearTimeout(keep), reject(init.signal!.reason)));
+      });
+    }
+    if (opts.rateLimitFirst && u.pathname === "/v2/checkout/orders" && writes === 1) return json({ name: "RATE_LIMIT_REACHED", message: "slow down" }, 429);
+    if (opts.declineVault && u.pathname === "/v2/checkout/orders" && body?.payment_source?.paypal?.vault_id) {
+      return json({ name: "UNPROCESSABLE_ENTITY", message: "declined", details: [{ issue: "INSTRUMENT_DECLINED" }] }, 422);
+    }
     if (u.pathname === "/v2/checkout/orders") {
       const rid = headers.get("PayPal-Request-Id")!;
       const id = orders.get(rid) ?? `ORDER${orders.size + 1}`;
@@ -40,12 +54,13 @@ function fakePayPal(opts: { completeOnCreate?: boolean; captureStatus?: string; 
       return json({ id: m[1], status: "COMPLETED", purchase_units: [{ payments: pay }] }, 201);
     }
     const g = u.pathname.match(/^\/v2\/checkout\/orders\/(\w+)$/);
+    if (g && opts.orderStatus === "COMPLETED") return json({ id: g[1], status: "COMPLETED", purchase_units: [{ payments: { captures: [{ id: `CAP-${g[1]}`, status: "COMPLETED" }], authorizations: [{ id: `AUTH-${g[1]}`, status: "CREATED" }] } }] });
     if (g) return json({ id: g[1], status: "PAYER_ACTION_REQUIRED", links: [{ rel: "payer-action", href: `https://sandbox.example/approve/${g[1]}` }] });
     const a = u.pathname.match(/^\/v2\/payments\/authorizations\/([\w-]+)\/(capture|void)$/);
     if (a) return a[2] === "capture" ? json({ id: `CAP2-${a[1]}`, status: "COMPLETED" }, 201) : new Response(null, { status: 204 });
     return json({ name: "NOT_FOUND", message: u.pathname }, 404);
   };
-  const client = new PayPalClient({ base: "https://paypal.test", clientId: "id", secret: "secret", fetch: fetchFn as typeof fetch });
+  const client = new PayPalClient({ base: "https://paypal.test", clientId: "id", secret: "secret", fetch: fetchFn as typeof fetch, timeoutMs: 100, backoffMs: 1 });
   return { client, calls };
 }
 
@@ -161,7 +176,7 @@ test("with a saved wallet the agent pays alone; held items capture on delivery o
 test("AgentGuard on the server counts money already committed in the ledger", () => {
   const ref = mission(autoSeed());
   const run = rebuildRun(ref);
-  const full = transition(emptyLedger(ref), 9, { state: "captured", amountCents: 29_990 });
+  const full = transition(emptyLedger(ref), run.lines.length - 1, { state: "captured", amountCents: 29_990 });
   assert.equal(guardLine(run, 0, full).guard.decision, "block", "over budget once the ledger is full");
   const paid = transition(emptyLedger(ref), 0, { state: "captured", amountCents: 100 });
   assert.equal(guardLine(run, 0, paid).guard.decision, "block", "already paid");
@@ -235,4 +250,79 @@ test("signed values can't be swapped between purposes", () => {
   const vault = signValue("vault", "VAULT1", SECRET);
   assert.equal(readValue("vault", vault, SECRET), "VAULT1");
   assert.equal(readValue("setup", vault, SECRET), null);
+});
+
+test("a missing or older ledger can't hide spending: unproven earlier lines count as spent", () => {
+  for (let seed = 1; seed < 400; seed++) {
+    const ref = mission(seed);
+    const run = rebuildRun(ref);
+    const first = run.lines[0].deal.outcome;
+    if (first.status !== "deal" || run.lines[1]?.deal.outcome.status !== "deal") continue;
+    const firstCents = toCents(first.amountToPay!);
+    assert.equal(spentBefore(run, 1, emptyLedger(ref)), firstCents, "no ledger: line 0 counts as spent");
+    const declined = transition(emptyLedger(ref), 0, { state: "declined", amountCents: firstCents });
+    assert.equal(spentBefore(run, 1, declined), 0, "proven unpaid: not counted");
+    const paid = transition(emptyLedger(ref), 0, { state: "captured", amountCents: firstCents });
+    assert.equal(spentBefore(run, 1, paid), firstCents);
+    assert.equal(spentBefore(run, 0, emptyLedger(ref)), 0, "later lines are not counted when the whole run fits the budget");
+    return;
+  }
+  assert.fail("no seed with two deals");
+});
+
+test("a declined saved wallet falls back to approval in PayPal, with a new request id", async () => {
+  const ref = mission(autoSeed(), "walletdecl1");
+  const { client, calls } = fakePayPal({ declineVault: true });
+  const r = await pay(ref, 0, emptyLedger(ref), false, { paypal: client, vaultId: "VAULT1", returnUrl: "https://app/return" });
+  assert.equal(r.decision, "needs_paypal_approval");
+  const creates = calls.filter((c) => c.path === "/v2/checkout/orders");
+  assert.equal(creates.length, 2);
+  assert.ok(creates[0].body.payment_source.paypal.vault_id);
+  assert.equal(creates[1].body.payment_source.paypal.vault_id, undefined);
+  assert.notEqual(creates[0].requestId, creates[1].requestId);
+  assert.match(r.log.map((l) => l.text).join(" "), /wallet was declined/);
+});
+
+test("a capture still under PayPal review is not shown as paid", async () => {
+  const ref = mission(autoSeed(), "pendingrev1");
+  const { client } = fakePayPal({ captureStatus: "PENDING" });
+  const run = rebuildRun(ref);
+  const line = run.lines.findIndex((l) => l.deal.outcome.status === "deal" && getItem(l.itemId).paypalFlow === "capture_now");
+  if (line < 0) return;
+  const ledger = transition(emptyLedger(ref), line, { state: "pending_approval", amountCents: toCents(run.lines[line].deal.outcome.amountToPay!), orderId: "ORDERX" });
+  const c = await complete(ref, line, ledger, client);
+  assert.ok("state" in c && c.state === "captured" && c.review === true);
+  assert.doesNotMatch(c.log[0].text, /^Paid/);
+  assert.match(c.log[0].text, /reviewing/);
+});
+
+test("resuming an order PayPal already completed records it instead of looping", async () => {
+  const ref = mission(autoSeed(), "resumedone1");
+  const run = rebuildRun(ref);
+  const amount = toCents(run.lines[0].deal.outcome.amountToPay!);
+  const ledger = transition(emptyLedger(ref), 0, { state: "pending_approval", amountCents: amount, orderId: "ORDERY" });
+  const { client, calls } = fakePayPal({ orderStatus: "COMPLETED" });
+  const r = await pay(ref, 0, ledger, false, { paypal: client, vaultId: null, returnUrl: "https://app/return" });
+  assert.equal(r.decision, "paid");
+  assert.equal(calls.filter((c) => c.path === "/v2/checkout/orders").length, 0, "no new order");
+});
+
+test("a hung or rate-limited PayPal call is retried with the same request id", async () => {
+  for (const opt of [{ hangFirst: true }, { rateLimitFirst: true }]) {
+    const ref = mission(autoSeed(), "retrysame01");
+    const { client, calls } = fakePayPal(opt);
+    const r = await pay(ref, 0, emptyLedger(ref), false, { paypal: client, vaultId: null, returnUrl: "https://app/return" });
+    assert.equal(r.decision, "needs_paypal_approval");
+    const creates = calls.filter((c) => c.path === "/v2/checkout/orders");
+    assert.equal(creates.length, 2);
+    assert.equal(creates[0].requestId, creates[1].requestId);
+  }
+});
+
+test("payment routes accept only same-site JSON", () => {
+  const req = (headers: Record<string, string>) => ({ url: "https://bazaar.test/api/agent/pay", headers: new Headers(headers) }) as never;
+  assert.doesNotThrow(() => checkOrigin(req({ origin: "https://bazaar.test", "content-type": "application/json; charset=utf-8" })));
+  assert.throws(() => checkOrigin(req({ "content-type": "application/json" })), /this site/);
+  assert.throws(() => checkOrigin(req({ origin: "https://evil.test", "content-type": "application/json" })), /this site/);
+  assert.throws(() => checkOrigin(req({ origin: "https://bazaar.test", "content-type": "text/plain; x=application/json" })), /JSON/);
 });

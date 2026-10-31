@@ -251,7 +251,8 @@ export default function DealRoom() {
     };
     for (const [k, l] of Object.entries(live.lines)) {
       const i = Number(k);
-      const st = map[l.state];
+      // Under PayPal review: money is set aside but not paid yet.
+      const st = l.review && (l.state === "captured" || l.state === "authorized") ? "paying" : map[l.state];
       if (!run.lines[i]) continue;
       if (!st) continue;
       statuses[i] = st;
@@ -268,7 +269,7 @@ export default function DealRoom() {
     const rows = live.lines[baseView.line]?.rows ?? [];
     const checkout = [
       ...baseView.checkout.filter((r) => r.source !== "paypal"),
-      ...rows.map((r) => ({ text: r.text, detail: [r.detail, r.debugId ? `PayPal debug id ${r.debugId}` : ""].filter(Boolean).join(" · ") || undefined, tone: "ok" as const })),
+      ...rows.map((r) => ({ text: r.text, detail: [r.detail, r.debugId ? `PayPal debug id ${r.debugId}` : ""].filter(Boolean).join(" · ") || undefined, tone: r.tone ?? ("ok" as const) })),
     ];
     return { ...baseView, statuses, amounts, committedUsd, capturedUsd, pendingUsd, checkout };
   }, [baseView, live.enabled, live.lines, run]);
@@ -581,7 +582,7 @@ export default function DealRoom() {
             )}
             {live.enabled && live.lines[view.line]?.state === "error" && (
               <div className="row-bad">
-                PayPal didn't respond as expected. Your money is safe; press Retry.{" "}
+                PayPal didn't respond as expected. Retry checks with PayPal first, so nothing is charged twice.{" "}
                 {showDetails && <span className="row-detail">{live.lines[view.line]?.error}</span>}{" "}
                 <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>

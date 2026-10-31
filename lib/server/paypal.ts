@@ -8,6 +8,10 @@ export interface PayPalConfig {
   clientId: string;
   secret: string;
   fetch?: typeof fetch;
+  /** Per-call limit, so a hung PayPal call fails fast and can be retried with the same request id. */
+  timeoutMs?: number;
+  /** Pause before a retry after a 429 or 5xx. */
+  backoffMs?: number;
 }
 
 export function configFromEnv(env: Record<string, string | undefined> = process.env): PayPalConfig | null {
@@ -85,6 +89,10 @@ export class PayPalClient {
     return this.cfg.fetch ?? fetch;
   }
 
+  private get signal() {
+    return AbortSignal.timeout(this.cfg.timeoutMs ?? 10_000);
+  }
+
   async accessToken(): Promise<string> {
     if (this.cached && this.cached.expires > Date.now()) return this.cached.value;
     let res: Response;
@@ -96,6 +104,7 @@ export class PayPalClient {
         "Content-Type": "application/x-www-form-urlencoded",
       },
         body: "grant_type=client_credentials",
+        signal: this.signal,
       });
     } catch (e) {
       throw new PayPalError(0, "PAYPAL_UNREACHABLE", "Couldn't reach PayPal. Check the connection and press Retry.", null, null);
@@ -106,7 +115,7 @@ export class PayPalClient {
     return data.access_token;
   }
 
-  /** One REST call. Retries once on a network error, a 5xx (same request id) or an expired token. */
+  /** One REST call. Retries once on a network error or timeout, a 429 or 5xx (same request id, after a pause) or an expired token. */
   async call<T>(method: "GET" | "POST", path: string, body?: unknown, requestId?: string): Promise<Call<T>> {
     const label = `${method} ${path}`;
     for (let attempt = 0; ; attempt++) {
@@ -122,6 +131,7 @@ export class PayPalClient {
             ...(requestId ? { "PayPal-Request-Id": requestId } : {}),
           },
           body: body === undefined ? undefined : JSON.stringify(body),
+          signal: this.signal,
         });
       } catch (e) {
         if (attempt === 0) continue;
@@ -140,7 +150,11 @@ export class PayPalClient {
         this.cached = null;
         continue;
       }
-      if (res.status >= 500 && attempt === 0) continue;
+      if ((res.status >= 500 || res.status === 429) && attempt === 0) {
+        const wait = Number(res.headers.get("retry-after")) * 1000 || (this.cfg.backoffMs ?? 400);
+        await new Promise((r) => setTimeout(r, Math.min(wait, 2000)));
+        continue;
+      }
       if (!res.ok) throw new PayPalError(res.status, data.name ?? "PAYPAL_ERROR", data.message ?? res.statusText, data.details?.[0]?.issue ?? null, debugId);
       return { data, debugId, label };
     }
@@ -215,6 +229,7 @@ export class PayPalClient {
           paypal: {
             description: "Infinity Bazaar shopping agent",
             usage_type: "MERCHANT",
+            usage_pattern: "UNSCHEDULED_POSTPAID",
             customer_type: "CONSUMER",
             permit_multiple_payment_tokens: true,
             experience_context: { brand_name: "Infinity Bazaar", return_url: returnUrl, cancel_url: cancelUrl },
@@ -247,5 +262,8 @@ export function paymentIds(order: Order): { captureId: string | null; authorizat
   return { captureId: cap?.id ?? null, authorizationId: auth?.id ?? null, status: cap?.status ?? auth?.status ?? null };
 }
 
-/** A capture counts once COMPLETED (or PENDING review); an authorization once CREATED (or PENDING). */
+/**
+ * Money moved or is set aside: a capture COMPLETED, an authorization CREATED, or
+ * either PENDING while PayPal reviews it (the caller shows PENDING as under review, not paid).
+ */
 export const paymentSucceeded = (status: string | null) => status === "COMPLETED" || status === "CREATED" || status === "PENDING";
