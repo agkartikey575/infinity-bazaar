@@ -3,7 +3,7 @@
 // reuse the same request id.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { complete, deliver, guardLine, lineKey, pay, rebuildRun, spentBefore } from "../lib/server/agent.ts";
+import { complete, declineLine, deliver, guardLine, lineKey, pay, rebuildRun, spentBefore } from "../lib/server/agent.ts";
 import { checkOrigin } from "../lib/server/request.ts";
 import { getItem } from "../src/engine/index.ts";
 import { committedCents, emptyLedger, readLedger, readValue, signLedger, signValue, transition, type RunRef } from "../lib/server/ledger.ts";
@@ -325,4 +325,26 @@ test("payment routes accept only same-site JSON", () => {
   assert.throws(() => checkOrigin(req({ "content-type": "application/json" })), /this site/);
   assert.throws(() => checkOrigin(req({ origin: "https://evil.test", "content-type": "application/json" })), /this site/);
   assert.throws(() => checkOrigin(req({ origin: "https://bazaar.test", "content-type": "text/plain; x=application/json" })), /JSON/);
+});
+
+test("only a payment waiting on you can be declined", () => {
+  const ref = mission(autoSeed(), "declinechk1");
+  const run = rebuildRun(ref);
+  assert.throws(() => declineLine(ref, 0, emptyLedger(ref)), /isn't waiting/, "an approved line can't be declined to hide spending");
+  const amount = toCents(run.lines[0].deal.outcome.amountToPay!);
+  const pending = transition(emptyLedger(ref), 0, { state: "pending_approval", amountCents: amount, orderId: "ORDERZ" });
+  assert.equal(declineLine(ref, 0, pending).entries[0].state, "declined", "an order waiting in PayPal can be cancelled");
+});
+
+test("a hold PayPal is still reviewing is not captured on delivery", async () => {
+  const ref = mission(autoSeed(), "holdreview1");
+  const run = rebuildRun(ref);
+  const line = run.lines.findIndex((l) => l.deal.outcome.status === "deal" && getItem(l.itemId).paypalFlow !== "capture_now");
+  if (line < 0) return;
+  const ledger = transition(emptyLedger(ref), line, { state: "authorized", amountCents: 100, orderId: "ORDERR", authorizationId: "AUTH-ORDERR", review: true });
+  const { client, calls } = fakePayPal();
+  const d = await deliver(ref, line, ledger, client);
+  assert.equal(d.state, "authorized");
+  assert.equal(d.review, true);
+  assert.equal(calls.filter((c) => c.path.startsWith("/v2/payments/")).length, 0, "no capture or void while under review");
 });

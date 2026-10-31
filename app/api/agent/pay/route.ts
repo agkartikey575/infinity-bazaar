@@ -4,6 +4,8 @@ import { fail, ok, paypalClient, readBody, vaultId } from "../../../../lib/serve
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Room for PayPal timeouts and one retry, so a slow call fails cleanly instead of being cut off. */
+export const maxDuration = 60;
 
 /** AgentGuard on the server, then PayPal. Blocked payments never reach PayPal. */
 export async function POST(req: NextRequest) {

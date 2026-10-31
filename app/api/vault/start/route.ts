@@ -6,6 +6,8 @@ import { signValue } from "../../../../lib/server/ledger.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Room for PayPal timeouts and one retry, so a slow call fails cleanly instead of being cut off. */
+export const maxDuration = 60;
 
 /** Step 1 of connecting your PayPal wallet to the agent: get an approval link. */
 export async function POST(req: NextRequest) {

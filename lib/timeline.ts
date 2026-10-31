@@ -368,11 +368,11 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         }
         checkout = [
           ...step.guard.checks.map((c) => ({ text: `${c.pass ? "✓" : "✗"} ${c.label}`, tone: (c.pass ? "info" : "bad") as CheckoutRow["tone"], source: "guard" as const })),
-          { text: `AgentGuard: ${step.guard.summary}`, tone: step.guard.decision === "approve" ? "ok" : step.guard.decision === "ask_user" ? "ask" : "bad", source: "guard" },
+          { text: step.guard.summary, tone: step.guard.decision === "approve" ? "ok" : step.guard.decision === "ask_user" ? "ask" : "bad", source: "guard" },
         ];
         if (step.guard.decision === "block") {
           statuses[step.line] = "blocked";
-          say(o.rogue ? "Blocked! The AI was talked into it, but the code said no. $0 spent." : "AgentGuard blocked the payment. No money moved.");
+          say(o.rogue ? "Blocked! The seller talked the agent into it, but AgentGuard said no. $0 spent." : "AgentGuard blocked the payment. No money moved.");
         }
         break;
       }

@@ -293,13 +293,26 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
   }
 }
 
+/**
+ * Decline a line, checked: only a payment waiting on you can be declined (one
+ * AgentGuard asked you about, or an order waiting in PayPal). Otherwise a
+ * declined line could be used to hide spending from AgentGuard.
+ */
+export function declineLine(ref: RunRef, line: number, ledger: Ledger): Ledger {
+  const { guard, amount } = guardLine(rebuildRun(ref), line, ledger);
+  const own = ledger.entries[line];
+  const waitingOnYou = own ? own.state === "pending_approval" : guard.decision === "ask_user";
+  if (!waitingOnYou) throw new Error(`line ${line} isn't waiting for your decision`);
+  return decline(line, ledger, amount);
+}
+
 /** The buyer declined, in the deal room or with Cancel in PayPal. Nothing to undo at PayPal. */
 export function decline(line: number, ledger: Ledger, amountCents: number): Ledger {
   return transition(ledger, line, { state: "declined", amountCents });
 }
 
 /** Delivery: the server decides from the deal whether it arrived. Capture the hold, or void it. */
-export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal: PayPalClient | null): Promise<{ ledger: Ledger; log: LogRow[]; state: "captured" | "voided"; review?: boolean }> {
+export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal: PayPalClient | null): Promise<{ ledger: Ledger; log: LogRow[]; state: "captured" | "voided" | "authorized"; review?: boolean }> {
   const entry = ledger.entries[line];
   if (entry?.state === "captured" || entry?.state === "voided") return { ledger, log: [], state: entry.state };
   if (!entry || entry.state !== "authorized") throw new Error(`line ${line} has no authorization to settle`);
@@ -312,6 +325,14 @@ export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal:
     return { state, ledger: transition(ledger, line, { state, amountCents: entry.amountCents }), log: [{ text: failed ? "Delivery failed, so the hold was released (demo mode)." : "Delivered and paid (demo mode).", detail: `Simulated ${failed ? "void" : "capture"} of the hold` }] };
   }
   if (!entry.authorizationId) throw new Error(`line ${line} is authorized but has no authorization id`);
+  // A hold PayPal is still reviewing can't be captured or settled yet: check before touching it.
+  if (entry.review && entry.orderId) {
+    const cur = await paypal.getOrder(entry.orderId);
+    const auth = cur.data.purchase_units?.[0]?.payments?.authorizations?.find((a) => a.id === entry.authorizationId);
+    if (!auth || auth.status === "PENDING") {
+      return { state: "authorized", review: true, ledger, log: [{ text: "PayPal is still reviewing the hold. Delivery settles once it clears.", tone: "ask", detail: `${cur.label} → authorization ${auth?.status ?? "missing"}`, debugId: cur.debugId }] };
+    }
+  }
   const voided = (detail: string, debugId: string | null) => ({
     state: "voided" as const,
     ledger: transition(ledger, line, { state: "voided", amountCents: entry.amountCents }),

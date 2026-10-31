@@ -144,7 +144,7 @@ export default function DealRoom() {
     if (!playing || !gate || gate.ready) return;
     const state = live.lines[gate.line]?.state ?? "idle";
     if (gate.action === "deliver") {
-      if (state === "authorized") live.deliver(gate.line);
+      if (state === "authorized" && !live.lines[gate.line]?.review) live.deliver(gate.line);
       return;
     }
     if (state !== "idle") return; // working, waiting for you, or failed
@@ -167,7 +167,7 @@ export default function DealRoom() {
     const idle = (l: number) => (live.lines[l]?.state ?? "idle") === "idle";
     // Approved: pay now. Blocked: let the server's AgentGuard refuse too, so its verdict is on screen.
     if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line)) live.pay(shown.line, false);
-    if (shown.type === "event" && live.lines[shown.line]?.state === "authorized") live.deliver(shown.line);
+    if (shown.type === "event" && live.lines[shown.line]?.state === "authorized" && !live.lines[shown.line]?.review) live.deliver(shown.line);
   }, [cursor, playing, live.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When PayPal needs a click, bring the button into view (it can be far down on a phone).
