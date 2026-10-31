@@ -75,7 +75,7 @@
         {
           "id": "renewal",
           "label": "renewal price far above first-year price",
-          "valueUsd": 25,
+          "valueUsd": 6,
           "payNow": false,
           "kind": "later"
         }
@@ -136,7 +136,7 @@
         {
           "id": "renewal",
           "label": "renewal at full list price",
-          "valueUsd": 40,
+          "valueUsd": 15,
           "payNow": false,
           "kind": "later"
         },
@@ -204,7 +204,7 @@
         {
           "id": "renewal",
           "label": "renewal price far above first-year price",
-          "valueUsd": 50,
+          "valueUsd": 12,
           "payNow": false,
           "kind": "later"
         }
@@ -476,7 +476,7 @@
         {
           "id": "renewal",
           "label": "renewal at full list price",
-          "valueUsd": 20,
+          "valueUsd": 8,
           "payNow": false,
           "kind": "later"
         }
@@ -537,7 +537,7 @@
         {
           "id": "commercial",
           "label": "commercial use costs extra",
-          "valueUsd": 40,
+          "valueUsd": 12,
           "payNow": false,
           "kind": "later"
         }
@@ -1517,7 +1517,7 @@
         {
           "id": "source-fee",
           "label": "source files cost extra",
-          "valueUsd": 30,
+          "valueUsd": 20,
           "payNow": false,
           "kind": "later"
         }
@@ -1669,7 +1669,7 @@
         {
           "id": "usage",
           "label": "commercial usage fee",
-          "valueUsd": 25,
+          "valueUsd": 15,
           "payNow": false,
           "kind": "later"
         }

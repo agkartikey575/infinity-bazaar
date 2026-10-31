@@ -77,12 +77,21 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     if (!s.fee || s.feeRevealed) return;
     s.feeRevealed = true;
     const a = s.archetype.id;
-    if (how === "answer") sellerSay(round, s, "reveal-fee", text.seller(a, "revealFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), s.fee.valueUsd);
+    const term = s.fee.kind === "conditional";
+    // A condition (restocking, expiry) is read out as a term, not as a dollar fee.
+    const said = term ? text.seller(a, "revealTerm", { feeLabel: s.fee.label }) : null;
+    if (how === "answer") sellerSay(round, s, "reveal-fee", said ?? text.seller(a, "revealFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), term ? undefined : s.fee.valueUsd);
     if (how === "surprise") {
       s.usedTactics.push("surprise-fee");
-      sellerSay(round, s, "surprise-fee", text.seller(a, "surpriseFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), s.fee.valueUsd);
+      sellerSay(round, s, "surprise-fee", said ?? text.seller(a, "surpriseFee", { feeLabel: s.fee.label, fee: s.fee.valueUsd }), term ? undefined : s.fee.valueUsd);
     }
-    beats.push({ kind: "detect", round, sellerId: s.id, tactic: "hidden-fee", text: `Detected: hidden fee of $${s.fee.valueUsd}` });
+    beats.push({
+      kind: "detect",
+      round,
+      sellerId: s.id,
+      tactic: "hidden-fee",
+      text: term ? `Detected: hidden condition: ${s.fee.label}` : `Detected: hidden fee of $${s.fee.valueUsd}: ${s.fee.label}`,
+    });
     comment(round, how === "surprise" ? text.commentary("surprise", { name: s.name, fee: s.fee.valueUsd }) : text.detect("hidden-fee", { name: s.name }));
     if (s.fee.kind === "conditional") agentSay(round, [s], "note-term", text.agent("noteTerm", { feeLabel: s.fee.label }));
   };
@@ -106,7 +115,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       }
       for (const o of active()) {
         if (o === s) continue;
-        const diff = allIn(o) - total;
+        const diff = trueCost(o) - (total + later);
         agentSay(round, [o], "decline", diff > 0 ? text.agent("declineQuote", { diff }) : text.agent("declineOthers"));
         sellerSay(round, o, "lost", text.seller(o.archetype.id, "lost"));
       }
