@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updated": "2026-10-30",
-  "note": "Prices are USD estimates (confidence=estimate). The app refreshes them with live web search using verifyQuery.",
+  "note": "Prices are USD estimates (confidence=estimate). verifyQuery is a search phrase for checking each price.",
   "groups": [
     {
       "id": "online",
@@ -28,6 +28,7 @@
     {
       "id": "domain-dev",
       "name": ".dev domain name",
+      "phrase": "a .dev domain name",
       "group": "online",
       "unit": "1 year",
       "description": "A memorable domain for the project's demo link.",
@@ -61,27 +62,29 @@
       "levers": [
         {
           "id": "privacy",
-          "label": "Free WHOIS privacy",
+          "label": "free WHOIS privacy",
           "valueUsd": 5
         },
         {
           "id": "renewal-lock",
-          "label": "Renewal price locked",
+          "label": "renewal price locked",
           "valueUsd": 6
         }
       ],
       "hiddenFees": [
         {
           "id": "renewal",
-          "label": "Renewal price far above first-year price",
-          "valueUsd": 25,
-          "payNow": false
+          "label": "renewal price far above first-year price",
+          "valueUsd": 6,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "hosting-starter",
       "name": "Starter web hosting",
+      "phrase": "starter web hosting",
       "group": "online",
       "unit": "1 year",
       "description": "Hosting for the landing page and API.",
@@ -115,12 +118,12 @@
       "levers": [
         {
           "id": "ssl",
-          "label": "Free SSL certificate",
+          "label": "free SSL certificate",
           "valueUsd": 10
         },
         {
           "id": "backups",
-          "label": "Daily backups",
+          "label": "daily backups",
           "valueUsd": 12
         },
         {
@@ -132,21 +135,24 @@
       "hiddenFees": [
         {
           "id": "renewal",
-          "label": "Renewal at full list price",
-          "valueUsd": 40,
-          "payNow": false
+          "label": "renewal at full list price",
+          "valueUsd": 15,
+          "payNow": false,
+          "kind": "later"
         },
         {
           "id": "setup",
-          "label": "One-time setup fee",
+          "label": "one-time setup fee",
           "valueUsd": 15,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "domain-hosting",
       "name": "Domain and hosting bundle",
+      "phrase": "a domain and hosting bundle",
       "group": "online",
       "unit": "1 year",
       "description": "A domain plus a year of hosting in one purchase.",
@@ -180,32 +186,34 @@
       "levers": [
         {
           "id": "ssl",
-          "label": "Free SSL certificate",
+          "label": "free SSL certificate",
           "valueUsd": 10
         },
         {
           "id": "renewal-lock",
-          "label": "Renewal price locked",
+          "label": "renewal price locked",
           "valueUsd": 15
         },
         {
           "id": "support",
-          "label": "Priority support",
+          "label": "priority support",
           "valueUsd": 8
         }
       ],
       "hiddenFees": [
         {
           "id": "renewal",
-          "label": "Renewal price far above first-year price",
-          "valueUsd": 50,
-          "payNow": false
+          "label": "renewal price far above first-year price",
+          "valueUsd": 12,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "ai-credits",
       "name": "AI API credits",
+      "phrase": "AI API credits",
       "group": "online",
       "unit": "$50 of credits",
       "description": "Credits to power the app's AI agents during the hackathon.",
@@ -239,27 +247,29 @@
       "levers": [
         {
           "id": "bonus",
-          "label": "Bonus credits",
+          "label": "bonus credits",
           "valueUsd": 10
         },
         {
           "id": "rollover",
-          "label": "Credits never expire",
+          "label": "credits never expire",
           "valueUsd": 5
         }
       ],
       "hiddenFees": [
         {
           "id": "expiry",
-          "label": "Credits expire in 30 days",
+          "label": "credits expire in 30 days",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "database-plan",
       "name": "Managed database plan",
+      "phrase": "a managed database plan",
       "group": "online",
       "unit": "3 months",
       "description": "A hosted database for user and deal data.",
@@ -293,27 +303,29 @@
       "levers": [
         {
           "id": "storage",
-          "label": "Double storage",
+          "label": "double storage",
           "valueUsd": 10
         },
         {
           "id": "backups",
-          "label": "Point-in-time backups",
+          "label": "point-in-time backups",
           "valueUsd": 8
         }
       ],
       "hiddenFees": [
         {
           "id": "egress",
-          "label": "Data transfer billed separately",
+          "label": "data transfer billed separately",
           "valueUsd": 12,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "email-service",
       "name": "Transactional email service",
+      "phrase": "a transactional email service",
       "group": "online",
       "unit": "3 months",
       "description": "Sends receipts and alerts to users.",
@@ -347,27 +359,29 @@
       "levers": [
         {
           "id": "volume",
-          "label": "Higher sending limit",
+          "label": "higher sending limit",
           "valueUsd": 8
         },
         {
           "id": "domain-setup",
-          "label": "Free domain verification help",
+          "label": "free domain verification help",
           "valueUsd": 5
         }
       ],
       "hiddenFees": [
         {
           "id": "overage",
-          "label": "Overage fees past the limit",
+          "label": "overage fees past the limit",
           "valueUsd": 10,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "uptime-monitor",
       "name": "Uptime monitoring",
+      "phrase": "uptime monitoring",
       "group": "online",
       "unit": "1 year",
       "description": "Alerts if the demo goes down during judging.",
@@ -401,12 +415,12 @@
       "levers": [
         {
           "id": "sms",
-          "label": "SMS alerts included",
+          "label": "SMS alerts",
           "valueUsd": 8
         },
         {
           "id": "status-page",
-          "label": "Public status page",
+          "label": "public status page",
           "valueUsd": 10
         }
       ],
@@ -415,6 +429,7 @@
     {
       "id": "pro-inbox",
       "name": "Custom-domain email inbox",
+      "phrase": "a custom-domain email inbox",
       "group": "online",
       "unit": "1 year",
       "description": "A professional contact address for the team.",
@@ -448,27 +463,29 @@
       "levers": [
         {
           "id": "extra-alias",
-          "label": "Extra aliases",
+          "label": "extra aliases",
           "valueUsd": 6
         },
         {
           "id": "storage",
-          "label": "More storage",
+          "label": "more storage",
           "valueUsd": 8
         }
       ],
       "hiddenFees": [
         {
           "id": "renewal",
-          "label": "Renewal at full list price",
-          "valueUsd": 20,
-          "payNow": false
+          "label": "renewal at full list price",
+          "valueUsd": 8,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "ui-template",
       "name": "UI template pack",
+      "phrase": "a UI template pack",
       "group": "design",
       "unit": "1 license",
       "description": "Polished screens so the app looks finished fast.",
@@ -502,7 +519,7 @@
       "levers": [
         {
           "id": "updates",
-          "label": "Lifetime updates",
+          "label": "lifetime updates",
           "valueUsd": 15
         },
         {
@@ -512,22 +529,24 @@
         },
         {
           "id": "extended",
-          "label": "Extended license",
+          "label": "extended license",
           "valueUsd": 30
         }
       ],
       "hiddenFees": [
         {
           "id": "commercial",
-          "label": "Commercial use costs extra",
-          "valueUsd": 40,
-          "payNow": false
+          "label": "commercial use costs extra",
+          "valueUsd": 12,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "icon-set",
       "name": "Icon set license",
+      "phrase": "an icon set license",
       "group": "design",
       "unit": "1 license",
       "description": "A consistent icon style across the app.",
@@ -561,27 +580,29 @@
       "levers": [
         {
           "id": "svg",
-          "label": "Editable SVG sources",
+          "label": "editable SVG sources",
           "valueUsd": 8
         },
         {
           "id": "extended",
-          "label": "Extended license",
+          "label": "extended license",
           "valueUsd": 20
         }
       ],
       "hiddenFees": [
         {
           "id": "attribution",
-          "label": "Attribution required unless you pay more",
+          "label": "attribution required unless you pay more",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "stock-video",
       "name": "Stock video clips",
+      "phrase": "stock video clips",
       "group": "design",
       "unit": "5 clips",
       "description": "B-roll for the demo video.",
@@ -620,22 +641,24 @@
         },
         {
           "id": "extra-clip",
-          "label": "One extra clip",
+          "label": "one extra clip",
           "valueUsd": 10
         }
       ],
       "hiddenFees": [
         {
           "id": "per-project",
-          "label": "License covers one project only",
+          "label": "license covers one project only",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "font-license",
       "name": "Web font license",
+      "phrase": "a web font license",
       "group": "design",
       "unit": "1 license",
       "description": "A distinctive typeface for the brand.",
@@ -669,27 +692,29 @@
       "levers": [
         {
           "id": "weights",
-          "label": "All weights included",
+          "label": "all weights",
           "valueUsd": 20
         },
         {
           "id": "app",
-          "label": "App embedding allowed",
+          "label": "app embedding allowed",
           "valueUsd": 25
         }
       ],
       "hiddenFees": [
         {
           "id": "pageviews",
-          "label": "Pageview cap on the web license",
+          "label": "pageview cap on the web license",
           "valueUsd": 30,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "music-track",
       "name": "Background music license",
+      "phrase": "a background music license",
       "group": "design",
       "unit": "1 track",
       "description": "Music under the demo video.",
@@ -723,12 +748,12 @@
       "levers": [
         {
           "id": "stems",
-          "label": "Separate stems",
+          "label": "separate stems",
           "valueUsd": 10
         },
         {
           "id": "youtube",
-          "label": "Pre-cleared for YouTube",
+          "label": "pre-cleared for YouTube",
           "valueUsd": 8
         }
       ],
@@ -737,13 +762,15 @@
           "id": "monetization",
           "label": "YouTube use needs a higher tier",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "illustration-pack",
       "name": "Illustration pack",
+      "phrase": "an illustration pack",
       "group": "design",
       "unit": "1 license",
       "description": "Characters for the merchants and agents.",
@@ -777,12 +804,12 @@
       "levers": [
         {
           "id": "custom-colors",
-          "label": "Recolored to the brand",
+          "label": "recolored to the brand",
           "valueUsd": 15
         },
         {
           "id": "extra-scenes",
-          "label": "Extra scenes",
+          "label": "extra scenes",
           "valueUsd": 10
         }
       ],
@@ -791,6 +818,7 @@
     {
       "id": "deck-template",
       "name": "Pitch deck template",
+      "phrase": "a pitch deck template",
       "group": "design",
       "unit": "1 license",
       "description": "Slides for the pitch section of the video.",
@@ -824,7 +852,7 @@
       "levers": [
         {
           "id": "charts",
-          "label": "Editable chart slides",
+          "label": "editable chart slides",
           "valueUsd": 6
         },
         {
@@ -838,6 +866,7 @@
     {
       "id": "device-mockups",
       "name": "Device mockup pack",
+      "phrase": "a device mockup pack",
       "group": "design",
       "unit": "1 license",
       "description": "Shows the app on phones and laptops in the video.",
@@ -871,12 +900,12 @@
       "levers": [
         {
           "id": "animated",
-          "label": "Animated mockups",
+          "label": "animated mockups",
           "valueUsd": 10
         },
         {
           "id": "extra-devices",
-          "label": "More devices",
+          "label": "more devices",
           "valueUsd": 6
         }
       ],
@@ -885,6 +914,7 @@
     {
       "id": "usb-mic",
       "name": "USB microphone",
+      "phrase": "a USB microphone",
       "group": "gear",
       "unit": "1 unit",
       "description": "Clear voice for the demo video.",
@@ -918,32 +948,34 @@
       "levers": [
         {
           "id": "pop-filter",
-          "label": "Pop filter included",
+          "label": "pop filter",
           "valueUsd": 8
         },
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 6
         },
         {
           "id": "warranty",
-          "label": "Extra year of warranty",
+          "label": "extra year of warranty",
           "valueUsd": 10
         }
       ],
       "hiddenFees": [
         {
           "id": "shipping",
-          "label": "Shipping added at checkout",
+          "label": "shipping added at checkout",
           "valueUsd": 9,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "webcam",
       "name": "1080p webcam",
+      "phrase": "a 1080p webcam",
       "group": "gear",
       "unit": "1 unit",
       "description": "Face-cam footage for the pitch.",
@@ -977,27 +1009,29 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 6
         },
         {
           "id": "privacy-cover",
-          "label": "Privacy cover and tripod",
+          "label": "privacy cover and tripod",
           "valueUsd": 7
         }
       ],
       "hiddenFees": [
         {
           "id": "shipping",
-          "label": "Shipping added at checkout",
+          "label": "shipping added at checkout",
           "valueUsd": 8,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "ring-light",
       "name": "Ring light with stand",
+      "phrase": "a ring light",
       "group": "gear",
       "unit": "1 unit",
       "description": "Even lighting for video calls and recording.",
@@ -1031,27 +1065,29 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 5
         },
         {
           "id": "phone-holder",
-          "label": "Phone holder",
+          "label": "phone holder",
           "valueUsd": 4
         }
       ],
       "hiddenFees": [
         {
           "id": "shipping",
-          "label": "Shipping added at checkout",
+          "label": "shipping added at checkout",
           "valueUsd": 7,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "green-screen",
       "name": "Collapsible green screen",
+      "phrase": "a green screen",
       "group": "gear",
       "unit": "1 unit",
       "description": "Clean backgrounds for the demo video.",
@@ -1085,27 +1121,29 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 6
         },
         {
           "id": "stand",
-          "label": "Mounting stand",
+          "label": "mounting stand",
           "valueUsd": 10
         }
       ],
       "hiddenFees": [
         {
           "id": "shipping",
-          "label": "Oversize shipping fee",
+          "label": "oversize shipping fee",
           "valueUsd": 12,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "mic-arm",
       "name": "Microphone boom arm",
+      "phrase": "a mic boom arm",
       "group": "gear",
       "unit": "1 unit",
       "description": "Keeps the mic steady and out of frame.",
@@ -1139,12 +1177,12 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 5
         },
         {
           "id": "cable-clips",
-          "label": "Cable management clips",
+          "label": "cable management clips",
           "valueUsd": 3
         }
       ],
@@ -1153,6 +1191,7 @@
     {
       "id": "usb-c-hub",
       "name": "USB-C hub",
+      "phrase": "a USB-C hub",
       "group": "gear",
       "unit": "1 unit",
       "description": "More ports for the mic, camera and second screen.",
@@ -1186,12 +1225,12 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 5
         },
         {
           "id": "warranty",
-          "label": "Extra year of warranty",
+          "label": "extra year of warranty",
           "valueUsd": 6
         }
       ],
@@ -1200,6 +1239,7 @@
     {
       "id": "headphones",
       "name": "Noise-cancelling headphones",
+      "phrase": "noise-cancelling headphones",
       "group": "gear",
       "unit": "1 unit",
       "description": "Focus during long build sessions.",
@@ -1233,32 +1273,34 @@
       "levers": [
         {
           "id": "case",
-          "label": "Carrying case",
+          "label": "carrying case",
           "valueUsd": 10
         },
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 6
         },
         {
           "id": "warranty",
-          "label": "Extra year of warranty",
+          "label": "extra year of warranty",
           "valueUsd": 12
         }
       ],
       "hiddenFees": [
         {
           "id": "restocking",
-          "label": "Restocking fee on returns",
+          "label": "restocking fee on returns",
           "valueUsd": 15,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "portable-monitor",
       "name": "15.6-inch portable monitor",
+      "phrase": "a portable monitor",
       "group": "gear",
       "unit": "1 unit",
       "description": "A second screen for coding and testing.",
@@ -1292,32 +1334,34 @@
       "levers": [
         {
           "id": "sleeve",
-          "label": "Protective sleeve",
+          "label": "protective sleeve",
           "valueUsd": 12
         },
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 10
         },
         {
           "id": "warranty",
-          "label": "Extra year of warranty",
+          "label": "extra year of warranty",
           "valueUsd": 15
         }
       ],
       "hiddenFees": [
         {
           "id": "restocking",
-          "label": "Restocking fee on returns",
+          "label": "restocking fee on returns",
           "valueUsd": 20,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "laptop-stand",
       "name": "Adjustable laptop stand",
+      "phrase": "a laptop stand",
       "group": "gear",
       "unit": "1 unit",
       "description": "Puts the webcam at eye level.",
@@ -1351,7 +1395,7 @@
       "levers": [
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 5
         }
       ],
@@ -1360,6 +1404,7 @@
     {
       "id": "video-editor",
       "name": "Video editor for a 3-minute demo",
+      "phrase": "a video editor for a 3-minute demo",
       "group": "freelancers",
       "unit": "1 video",
       "description": "Turns raw screen recordings into a tight demo video.",
@@ -1393,32 +1438,34 @@
       "levers": [
         {
           "id": "revision",
-          "label": "One extra revision",
+          "label": "one extra revision",
           "valueUsd": 20
         },
         {
           "id": "rush",
-          "label": "Faster delivery",
+          "label": "faster delivery",
           "valueUsd": 30
         },
         {
           "id": "captions",
-          "label": "Burned-in captions",
+          "label": "burned-in captions",
           "valueUsd": 15
         }
       ],
       "hiddenFees": [
         {
           "id": "revision-fee",
-          "label": "Revisions billed separately",
+          "label": "revisions billed separately",
           "valueUsd": 30,
-          "payNow": false
+          "payNow": false,
+          "kind": "conditional"
         }
       ]
     },
     {
       "id": "logo-designer",
       "name": "Logo design",
+      "phrase": "a logo designer",
       "group": "freelancers",
       "unit": "1 logo",
       "description": "A mark for Infinity Bazaar.",
@@ -1452,32 +1499,34 @@
       "levers": [
         {
           "id": "concepts",
-          "label": "Extra concepts",
+          "label": "extra concepts",
           "valueUsd": 25
         },
         {
           "id": "source",
-          "label": "Source files",
+          "label": "source files",
           "valueUsd": 20
         },
         {
           "id": "revision",
-          "label": "One extra revision",
+          "label": "one extra revision",
           "valueUsd": 15
         }
       ],
       "hiddenFees": [
         {
           "id": "source-fee",
-          "label": "Source files cost extra",
-          "valueUsd": 30,
-          "payNow": false
+          "label": "source files cost extra",
+          "valueUsd": 20,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "copywriter",
       "name": "Landing page copywriter",
+      "phrase": "a landing page copywriter",
       "group": "freelancers",
       "unit": "1 page",
       "description": "Clear words for the landing page and submission.",
@@ -1511,12 +1560,12 @@
       "levers": [
         {
           "id": "revision",
-          "label": "One extra revision",
+          "label": "one extra revision",
           "valueUsd": 20
         },
         {
           "id": "devpost",
-          "label": "Devpost write-up included",
+          "label": "Devpost write-up",
           "valueUsd": 30
         }
       ],
@@ -1525,6 +1574,7 @@
     {
       "id": "pitch-coach",
       "name": "Pitch coaching session",
+      "phrase": "a pitch coaching session",
       "group": "freelancers",
       "unit": "1 hour",
       "description": "Practice the 3-minute story before recording.",
@@ -1558,12 +1608,12 @@
       "levers": [
         {
           "id": "followup",
-          "label": "Follow-up review of the final video",
+          "label": "follow-up review of the final video",
           "valueUsd": 30
         },
         {
           "id": "script",
-          "label": "Script feedback",
+          "label": "script feedback",
           "valueUsd": 20
         }
       ],
@@ -1572,6 +1622,7 @@
     {
       "id": "voiceover",
       "name": "Voice-over artist",
+      "phrase": "a voice-over artist",
       "group": "freelancers",
       "unit": "3 minutes",
       "description": "A professional narrator for the demo video.",
@@ -1605,7 +1656,7 @@
       "levers": [
         {
           "id": "retake",
-          "label": "Free retake",
+          "label": "free retake",
           "valueUsd": 15
         },
         {
@@ -1617,15 +1668,17 @@
       "hiddenFees": [
         {
           "id": "usage",
-          "label": "Commercial usage fee",
-          "valueUsd": 25,
-          "payNow": false
+          "label": "commercial usage fee",
+          "valueUsd": 15,
+          "payNow": false,
+          "kind": "later"
         }
       ]
     },
     {
       "id": "ux-review",
       "name": "UX review of the app",
+      "phrase": "a UX review",
       "group": "freelancers",
       "unit": "1 review",
       "description": "Fresh eyes on the deal room screen.",
@@ -1659,12 +1712,12 @@
       "levers": [
         {
           "id": "video",
-          "label": "Recorded walkthrough",
+          "label": "recorded walkthrough",
           "valueUsd": 20
         },
         {
           "id": "followup",
-          "label": "Second review after fixes",
+          "label": "second review after fixes",
           "valueUsd": 30
         }
       ],
@@ -1673,6 +1726,7 @@
     {
       "id": "motion-intro",
       "name": "Animated logo intro",
+      "phrase": "an animated logo intro",
       "group": "freelancers",
       "unit": "10 seconds",
       "description": "A short branded opening for the video.",
@@ -1706,12 +1760,12 @@
       "levers": [
         {
           "id": "sound",
-          "label": "Sound effect included",
+          "label": "sound effect",
           "valueUsd": 10
         },
         {
           "id": "variant",
-          "label": "Vertical version",
+          "label": "vertical version",
           "valueUsd": 15
         }
       ],
@@ -1720,6 +1774,7 @@
     {
       "id": "qa-tester",
       "name": "QA tester",
+      "phrase": "a QA tester for a day",
       "group": "freelancers",
       "unit": "1 day",
       "description": "Finds bugs before the judges do.",
@@ -1753,12 +1808,12 @@
       "levers": [
         {
           "id": "devices",
-          "label": "Testing on more devices",
+          "label": "testing on more devices",
           "valueUsd": 20
         },
         {
           "id": "report",
-          "label": "Written bug report",
+          "label": "written bug report",
           "valueUsd": 10
         }
       ],
@@ -1767,6 +1822,7 @@
     {
       "id": "pizza",
       "name": "Pizza for the team",
+      "phrase": "pizza for the team",
       "group": "fun",
       "unit": "4 large pizzas",
       "description": "Fuel for the all-nighter.",
@@ -1800,32 +1856,34 @@
       "levers": [
         {
           "id": "drinks",
-          "label": "Free drinks",
+          "label": "free drinks",
           "valueUsd": 8
         },
         {
           "id": "free-delivery",
-          "label": "Free delivery",
+          "label": "free delivery",
           "valueUsd": 6
         },
         {
           "id": "dessert",
-          "label": "Free dessert",
+          "label": "free dessert",
           "valueUsd": 7
         }
       ],
       "hiddenFees": [
         {
           "id": "delivery",
-          "label": "Delivery and service fees",
+          "label": "delivery and service fees",
           "valueUsd": 10,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "energy-drinks",
       "name": "Energy drinks",
+      "phrase": "a 12-pack of energy drinks",
       "group": "fun",
       "unit": "12-pack",
       "description": "Caffeine for the final push.",
@@ -1859,12 +1917,12 @@
       "levers": [
         {
           "id": "free-delivery",
-          "label": "Free delivery",
+          "label": "free delivery",
           "valueUsd": 5
         },
         {
           "id": "extra-cans",
-          "label": "Four extra cans",
+          "label": "four extra cans",
           "valueUsd": 8
         }
       ],
@@ -1873,6 +1931,7 @@
     {
       "id": "hoodies",
       "name": "Team hoodies",
+      "phrase": "team hoodies",
       "group": "fun",
       "unit": "4 hoodies",
       "description": "Matching Infinity Bazaar hoodies for the photo.",
@@ -1906,32 +1965,34 @@
       "levers": [
         {
           "id": "print-back",
-          "label": "Back print included",
+          "label": "back print",
           "valueUsd": 20
         },
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 12
         },
         {
           "id": "rush",
-          "label": "Rush production",
+          "label": "rush production",
           "valueUsd": 25
         }
       ],
       "hiddenFees": [
         {
           "id": "setup",
-          "label": "Print setup fee",
+          "label": "print setup fee",
           "valueUsd": 25,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "stickers",
       "name": "Die-cut stickers",
+      "phrase": "die-cut stickers",
       "group": "fun",
       "unit": "100 stickers",
       "description": "Giveaways with the logo.",
@@ -1970,22 +2031,24 @@
         },
         {
           "id": "free-shipping",
-          "label": "Free shipping",
+          "label": "free shipping",
           "valueUsd": 6
         }
       ],
       "hiddenFees": [
         {
           "id": "setup",
-          "label": "Die setup fee",
+          "label": "die setup fee",
           "valueUsd": 15,
-          "payNow": true
+          "payNow": true,
+          "kind": "now"
         }
       ]
     },
     {
       "id": "coffee",
       "name": "Specialty coffee beans",
+      "phrase": "specialty coffee beans",
       "group": "fun",
       "unit": "1 kg",
       "description": "Better coffee than the office machine.",
@@ -2019,12 +2082,12 @@
       "levers": [
         {
           "id": "grind",
-          "label": "Ground to order",
+          "label": "ground to order",
           "valueUsd": 3
         },
         {
           "id": "free-delivery",
-          "label": "Free delivery",
+          "label": "free delivery",
           "valueUsd": 5
         }
       ],
@@ -2033,6 +2096,7 @@
     {
       "id": "cowork-pass",
       "name": "Coworking day pass",
+      "phrase": "a coworking day pass",
       "group": "fun",
       "unit": "2 people",
       "description": "A quiet place to record the video.",
@@ -2066,12 +2130,12 @@
       "levers": [
         {
           "id": "meeting-room",
-          "label": "One hour of meeting room",
+          "label": "one hour of meeting room",
           "valueUsd": 15
         },
         {
           "id": "coffee",
-          "label": "Unlimited coffee",
+          "label": "unlimited coffee",
           "valueUsd": 6
         }
       ],
@@ -2080,6 +2144,7 @@
     {
       "id": "cake",
       "name": "Celebration cake",
+      "phrase": "a celebration cake",
       "group": "fun",
       "unit": "1 cake",
       "description": "For when the submission goes in.",
@@ -2113,12 +2178,12 @@
       "levers": [
         {
           "id": "custom-text",
-          "label": "Custom message on top",
+          "label": "custom message on top",
           "valueUsd": 5
         },
         {
           "id": "free-delivery",
-          "label": "Free delivery",
+          "label": "free delivery",
           "valueUsd": 6
         }
       ],

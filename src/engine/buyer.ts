@@ -21,5 +21,7 @@ export function planBuyer(item: CatalogItem, itemCapUsd?: number): BuyerPlan {
     const price = Math.round(anchor + (walkAway - anchor) * share);
     if (offers.length === 0 || price > offers[offers.length - 1]) offers.push(price);
   }
-  return { anchor, target, walkAway, offers };
+  const cap = Math.min(itemCapUsd ?? item.price.high, item.price.high);
+  const stretch = Math.max(walkAway, Math.min(cap, Math.round(walkAway * 1.1)));
+  return { anchor, target, walkAway, stretch, cap, offers };
 }

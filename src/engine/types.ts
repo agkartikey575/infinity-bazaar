@@ -10,11 +10,15 @@ export interface Lever {
   valueUsd: number;
   /** For hidden fees: true when charged at checkout, false for a later cost such as a renewal. */
   payNow?: boolean;
+  /** For hidden fees: "now" (at checkout), "later" (a certain later cost) or "conditional" (a term, not a cost). */
+  kind?: "now" | "later" | "conditional";
 }
 
 export interface CatalogItem {
   id: string;
   name: string;
+  /** How the item reads mid-sentence, e.g. "a USB microphone". */
+  phrase: string;
   group: GroupId;
   unit: string;
   description: string;
@@ -104,12 +108,18 @@ export interface Seller {
   leverAsked: boolean;
   upsellPrice: number | null;
   usedTactics: string[];
+  /** Price this seller has agreed to, if they accepted an offer. */
+  agreedAt: number | null;
 }
 
 export interface BuyerPlan {
   anchor: number;
   target: number;
   walkAway: number;
+  /** Up to 10% over walk-away (never over the cap), used only when it lowers the true total cost. */
+  stretch: number;
+  /** Hard ceiling for this item: the mission's item cap, or the web high price. */
+  cap: number;
   /** Planned offers, rising in shrinking steps from anchor to walkAway. */
   offers: number[];
 }
@@ -119,7 +129,7 @@ export type Beat =
       kind: "agent";
       round: number;
       to: string[];
-      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee";
+      move: "anchor" | "offer" | "leverage" | "ask-fees" | "ask-lever" | "accept" | "walk-away" | "accept-upsell" | "reject-fee" | "absorb-fee" | "decline" | "explain" | "priced-out" | "quote-request" | "note-term";
       price?: number;
       refPrice?: number;
       text: string;
@@ -128,7 +138,7 @@ export type Beat =
       kind: "seller";
       round: number;
       sellerId: string;
-      move: "counter" | "final" | "accept" | "reveal-fee" | "no-fee" | "grant-lever" | "tactic" | "exit" | "surprise-fee" | "absorb-fee";
+      move: "counter" | "final" | "accept" | "reveal-fee" | "no-fee" | "grant-lever" | "tactic" | "exit" | "surprise-fee" | "absorb-fee" | "lost";
       price?: number;
       tactic?: string;
       lever?: Lever;
@@ -152,7 +162,9 @@ export interface DealOutcome {
   surpriseFee?: boolean;
   /** Extras won instead of a lower price. */
   levers: Lever[];
-  /** price + all known fees - value of levers won. Used to compare sellers. */
+  /** Conditions the buyer accepted, such as "restocking fee on returns". */
+  terms: string[];
+  /** price + fee now + later fee: what the deal really costs. */
   effectiveCost?: number;
   /** Amount PayPal is asked to move: price + fee. */
   amountToPay?: number;

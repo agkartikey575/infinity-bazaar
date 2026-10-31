@@ -5,7 +5,12 @@ export interface GuardRules {
   budgetUsd: number;
   askAboveUsd: number;
   itemCapUsd?: number;
-  blockedSellers?: string[];
+  /** Money to keep untouched unless you approve dipping into it. */
+  reserveUsd?: number;
+  /** Catalog groups the mission allows. */
+  allowedGroups?: string[];
+  /** Stable seller keys (names in this version) the user never wants to pay. */
+  blockedSellerIds?: string[];
 }
 
 export interface GuardCheck {
@@ -19,22 +24,64 @@ export interface GuardDecision {
   summary: string;
 }
 
-export function checkPayment(p: { amount: number; spentSoFar: number; sellerName: string; rules: GuardRules }): GuardDecision {
-  const { amount, spentSoFar, sellerName, rules } = p;
+export interface PaymentRequest {
+  amount: number;
+  currency?: string;
+  /** Committed so far: captured plus held, excluding refunds and voids. */
+  spentSoFar: number;
+  sellerId: string;
+  sellerName: string;
+  group?: string;
+  /** True when this line already has a payment. */
+  alreadyPaid?: boolean;
+  /** The amount the engine agreed (price + disclosed fee). The payment must match it exactly. */
+  agreedAmount?: number;
+  /** A fee came out only at checkout. */
+  surpriseFee?: boolean;
+  /** A certain later cost (renewal, usage fee) the buyer takes on. */
+  laterFee?: number;
+  rules: GuardRules;
+}
+
+const usd = (n: number) => `$${n.toFixed(2)}`;
+
+export function checkPayment(p: PaymentRequest): GuardDecision {
+  const { amount, spentSoFar, rules } = p;
   const total = spentSoFar + amount;
   const checks: GuardCheck[] = [
-    { label: `$${amount} is a positive amount`, pass: amount > 0 && Number.isFinite(amount) },
-    { label: `$${amount} ≤ item cap $${rules.itemCapUsd ?? "none"}`, pass: rules.itemCapUsd === undefined || amount <= rules.itemCapUsd },
-    { label: `total $${total} ≤ budget $${rules.budgetUsd}`, pass: total <= rules.budgetUsd },
-    { label: `${sellerName} is an allowed seller`, pass: !(rules.blockedSellers ?? []).includes(sellerName) },
+    { label: `${usd(amount)} is a valid amount in whole cents`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6 },
+    { label: `currency is USD`, pass: (p.currency ?? "USD") === "USD" },
+    { label: `${usd(amount)} ≤ item cap ${rules.itemCapUsd === undefined ? "(none)" : usd(rules.itemCapUsd)}`, pass: rules.itemCapUsd === undefined || amount <= rules.itemCapUsd },
+    { label: `total ${usd(total)} ≤ budget ${usd(rules.budgetUsd)}`, pass: total <= rules.budgetUsd },
+    { label: `${p.sellerName} is an allowed seller`, pass: !(rules.blockedSellerIds ?? []).includes(p.sellerId) },
+    { label: `item category is allowed`, pass: !rules.allowedGroups || !p.group || rules.allowedGroups.includes(p.group) },
+    { label: `not already paid`, pass: !p.alreadyPaid },
+    { label: `matches the agreed price${p.agreedAmount === undefined ? "" : ` ${usd(p.agreedAmount)}`}`, pass: p.agreedAmount === undefined || p.agreedAmount === amount },
   ];
   if (checks.some((c) => !c.pass)) {
     const failed = checks.filter((c) => !c.pass).map((c) => c.label);
     return { decision: "block", checks, summary: `BLOCKED: failed ${failed.join("; ")}. No call to PayPal was made.` };
   }
-  const needsOk = amount > rules.askAboveUsd;
-  checks.push({ label: `$${amount} ≤ ask-me line $${rules.askAboveUsd}`, pass: !needsOk });
-  return needsOk
-    ? { decision: "ask_user", checks, summary: `ASKING YOU: $${amount} is above your $${rules.askAboveUsd} ask-me line.` }
+
+  const reasons: string[] = [];
+  const overLine = amount > rules.askAboveUsd;
+  checks.push({ label: `${usd(amount)} ≤ ask-me line ${usd(rules.askAboveUsd)}`, pass: !overLine });
+  if (overLine) reasons.push(`${usd(amount)} is above your ${usd(rules.askAboveUsd)} ask-me line`);
+  if (p.surpriseFee) {
+    checks.push({ label: `no fee sprung at checkout`, pass: false });
+    reasons.push(`a fee only came out at checkout`);
+  }
+  if (p.laterFee) {
+    checks.push({ label: `no later charges`, pass: false });
+    reasons.push(`it commits you to ${usd(p.laterFee)} later`);
+  }
+  if (rules.reserveUsd) {
+    const room = rules.budgetUsd - rules.reserveUsd;
+    const dips = total > room;
+    checks.push({ label: `keeps the ${usd(rules.reserveUsd)} reserve`, pass: !dips });
+    if (dips) reasons.push(`it dips into your ${usd(rules.reserveUsd)} reserve`);
+  }
+  return reasons.length
+    ? { decision: "ask_user", checks, summary: `ASKING YOU: ${reasons.join(" and ")}.` }
     : { decision: "approve", checks, summary: `APPROVED: all checks passed.` };
 }
