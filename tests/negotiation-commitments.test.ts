@@ -80,3 +80,18 @@ test("the stretch and later-fee paths are reachable in normal play", () => {
   });
   assert.ok(stretched > 0 && later > 0, `stretched ${stretched}, later-fee deals ${later}`);
 });
+
+test("a deal agreed with a known fee is never re-opened when a rival moves later", () => {
+  for (const it of catalog.items) {
+    for (const seed of SEEDS) {
+      const d = runDeal(it.id, { seed, forceEvents: ["price-match"] });
+      d.beats.forEach((b, i) => {
+        if (b.kind !== "seller" || b.move !== "accept") return;
+        const later = d.beats.slice(i + 1);
+        const surprise = later.some((x) => x.kind === "seller" && x.move === "surprise-fee" && x.sellerId === b.sellerId);
+        const reopened = later.some((x) => x.kind === "agent" && x.move === "absorb-fee" && x.to.includes(b.sellerId));
+        assert.ok(surprise || !reopened, `${it.id}#${seed}: asked ${b.sellerId} to absorb a fee it had already agreed`);
+      });
+    }
+  }
+});

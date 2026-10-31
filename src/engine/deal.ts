@@ -148,8 +148,10 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     const bestRival = rivals.length ? Math.min(...rivals.map((o) => trueCost(o))) : Infinity;
     const fee = payNowFee(s);
 
+    // A deal agreed with the fee already known is honoured as agreed, even if a rival moves later.
+    const kept = committed(s) && !surprised;
     // A checkout fee pushed this seller over the limit or behind a rival: ask them to absorb it.
-    if (fee > 0 && (!affordable(s) || trueCost(s) >= bestRival)) {
+    if (fee > 0 && (!affordable(s) || (!kept && trueCost(s) >= bestRival))) {
       const target = Math.min(limit, bestRival - 1 - laterFee(s));
       const absorbed = Math.max(s.floor, Math.min(s.ask, target - fee));
       if (absorbed + fee <= target && absorbed < s.ask) {
