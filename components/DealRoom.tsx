@@ -21,7 +21,7 @@ const FACE_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
 const STATUS_LABEL: Record<LineStatus, string> = {
   waiting: "Waiting",
   negotiating: "Negotiating",
-  checking: "AgentGuard check",
+  checking: "Checking with AgentGuard",
   "awaiting-approval": "Needs your OK",
   paying: "Waiting for PayPal",
   authorized: "Held until delivery",
@@ -29,7 +29,7 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   declined: "Declined",
   blocked: "Blocked",
   "no-deal": "Walked away",
-  voided: "Hold voided",
+  voided: "Hold released",
 };
 
 const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
@@ -67,7 +67,7 @@ function Booth({ booth, color, floor }: { booth: BoothView; color: string; floor
           </div>
         ))}
       </div>
-      {floor !== null && <div className="floor">Hidden floor was ${floor}</div>}
+      {floor !== null && <div className="floor">Lowest they'd accept: ${floor}</div>}
     </div>
   );
 }
@@ -135,6 +135,7 @@ export default function DealRoom() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const approveRef = useRef<HTMLButtonElement>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const [seedDraft, setSeedDraft] = useState("42");
@@ -267,7 +268,7 @@ export default function DealRoom() {
     const rows = live.lines[baseView.line]?.rows ?? [];
     const checkout = [
       ...baseView.checkout.filter((r) => r.source !== "paypal"),
-      ...rows.map((r) => ({ text: r.debugId ? `${r.text} · debug ${r.debugId}` : r.text, tone: "ok" as const })),
+      ...rows.map((r) => ({ text: r.text, detail: [r.detail, r.debugId ? `PayPal debug id ${r.debugId}` : ""].filter(Boolean).join(" · ") || undefined, tone: "ok" as const })),
     ];
     return { ...baseView, statuses, amounts, committedUsd, capturedUsd, pendingUsd, checkout };
   }, [baseView, live.enabled, live.lines, run]);
@@ -366,7 +367,7 @@ export default function DealRoom() {
           <label className="field">
             <span className="label">Mission or item</span>
             <select id="selection" value={rogue ? "" : selection} onChange={(e) => restart({ selection: e.target.value, seed })}>
-              {rogue && <option value="">Rogue agent demo</option>}
+              {rogue && <option value="">Stress test: agent goes rogue</option>}
               <optgroup label="Missions">
                 {missions.map((m) => (
                   <option key={m.id} value={`mission:${m.id}`}>
@@ -440,7 +441,7 @@ export default function DealRoom() {
                     restart({ seed, rogue });
                   }}
                 />
-                Real PayPal sandbox
+                Live payments (PayPal sandbox)
               </label>
               {live.walletError && <span className="note">{live.walletError}</span>}
               {live.enabled &&
@@ -459,18 +460,18 @@ export default function DealRoom() {
       <section className="room" aria-label="Deal room">
         <div className="mission">
           <div className="goal-box">
-            <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Rogue demo" : "Single deal"}</span>
+            <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Stress test" : "Single deal"}</span>
             <p className="goal">“{run.goal}”</p>
             <span className="note">Table #{run.seed} always replays the same deal.</span>
           </div>
           <div className="budget">
-            <span className="label">AgentGuard budget</span>
+            <span className="label">Budget</span>
             <div className="bbar">
               <span className="sr-only">Committed ${view.committedUsd} of ${run.budgetUsd}</span>
               <div className="bfill" style={{ width: `${capturedShare}%` }} />
               <div className="bheld" style={{ left: `${capturedShare}%`, width: `${heldShare}%` }} />
               <div className="bpending" style={{ left: `${capturedShare + heldShare}%`, width: `${pendingShare}%` }} />
-              <div className="bask" style={{ left: `${askLine}%` }} title={`Ask me above $${run.askAboveUsd}`} />
+              <div className="bask" style={{ left: `${askLine}%` }} title={`Approval needed above $${run.askAboveUsd}`} />
             </div>
             <div className="bnums">
               <span>
@@ -492,7 +493,7 @@ export default function DealRoom() {
         {item && view.plan && (
           <div className="pricecard">
             <div className="pc">
-              <span className="label">Web low</span>
+              <span className="label">Lowest online</span>
               <b>${item.price.low}</b>
             </div>
             <div className="pc">
@@ -500,11 +501,11 @@ export default function DealRoom() {
               <b>${item.price.typical}</b>
             </div>
             <div className="pc">
-              <span className="label">Web high</span>
+              <span className="label">Highest online</span>
               <b>${item.price.high}</b>
             </div>
             <div className="pc target">
-              <span className="label">Agent target</span>
+              <span className="label">Target</span>
               <b>${view.plan.target}</b>
             </div>
             <div className="pc walk">
@@ -550,15 +551,20 @@ export default function DealRoom() {
             {view.event && <div className="event">⚡ {view.event}</div>}
           </div>
           <div>
-            <span className="label">AgentGuard and PayPal sandbox</span>
+            <span className="label">Payment</span>
             <div className="checkout">
               {view.checkout.length === 0 && <div className="row-info">Waiting for a deal…</div>}
               {view.checkout.map((r, i) => (
                 <div key={i} className={`row-${r.tone}`}>
                   {r.text}
+                  {showDetails && r.detail && <div className="row-detail">{r.detail}</div>}
                 </div>
               ))}
             </div>
+            <label className="switch details-toggle">
+              <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
+              Show PayPal details
+            </label>
             {live.enabled && live.lines[view.line]?.state === "needs-click" && (
               <button id="pay-with-paypal" className="primary" onClick={() => live.payWithPayPal(view.line)}>
                 Pay with PayPal
@@ -575,16 +581,17 @@ export default function DealRoom() {
             )}
             {live.enabled && live.lines[view.line]?.state === "error" && (
               <div className="row-bad">
-                PayPal error: {live.lines[view.line]?.error}{" "}
+                PayPal didn't respond as expected. Your money is safe; press Retry.{" "}
+                {showDetails && <span className="row-detail">{live.lines[view.line]?.error}</span>}{" "}
                 <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>
             )}
             <span className="note">
               {live.enabled
                 ? live.status.wallet
-                  ? "Real PayPal sandbox. Approved payments use your connected wallet; ids are PayPal's own."
-                  : "Real PayPal sandbox. Connect a wallet to let the agent pay by itself, or approve each payment in PayPal."
-                : "PayPal calls are simulated here."}
+                  ? "Live PayPal sandbox payments. Approved items are paid from your connected wallet."
+                  : "Live PayPal sandbox payments. Connect your wallet so the agent can pay approved items by itself, or approve each one in PayPal."
+                : "Demo mode: payments are simulated."}
             </span>
           </div>
         </div>
@@ -636,7 +643,7 @@ export default function DealRoom() {
               <dt>How PayPal pays</dt>
               <dd>{askItem.paypalFlow === "capture_now" ? "Charged now (digital delivery)" : "Held now, charged when delivered"}</dd>
               <dt>Why you're asked</dt>
-              <dd>{askGuard?.summary.replace(/^ASKING YOU: /, "") ?? ""}</dd>
+              <dd>{askGuard?.summary.replace(/^Needs your OK because /, "").replace(/\.$/, "") ?? ""}</dd>
             </dl>
             <div className="btns">
               <button ref={approveRef} className="primary" onClick={() => decide("approved")}>

@@ -90,7 +90,9 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       round,
       sellerId: s.id,
       tactic: "hidden-fee",
-      text: term ? `Detected: hidden condition: ${s.fee.label}` : `Detected: hidden fee of $${s.fee.valueUsd}: ${s.fee.label}`,
+      text: term ? `Hidden condition spotted: ${s.fee.label}` : `Hidden fee spotted: ${s.fee.label}, $${s.fee.valueUsd}`,
+      fee: term ? undefined : s.fee.valueUsd,
+      feeLabel: s.fee.label,
     });
     comment(round, how === "surprise" ? text.commentary("surprise", { name: s.name, fee: s.fee.valueUsd }) : text.detect("hidden-fee", { name: s.name }));
     if (s.fee.kind === "conditional") agentSay(round, [s], "note-term", text.agent("noteTerm", { feeLabel: s.fee.label }));
@@ -404,7 +406,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
         sellerSay(round, s, "exit", text.seller(a, "exit"));
         break;
       case "bluff":
-        beats.push({ kind: "detect", round, sellerId: s.id, tactic: "phantom-buyer", text: "Detected: invented rival buyer" });
+        beats.push({ kind: "detect", round, sellerId: s.id, tactic: "phantom-buyer", text: "Tactic spotted: made-up rival buyer" });
         break;
       case "match-best-offer":
         s.ask = Math.max(s.floor, lowestRival(s));

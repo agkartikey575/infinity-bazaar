@@ -16,7 +16,7 @@ function knownFees(d: DealResult) {
   for (const b of d.beats) {
     if (b.kind === "seller" && (b.move === "reveal-fee" || b.move === "surprise-fee") && b.price !== undefined) fees.set(b.sellerId, b.price);
     // Fees can also come out through a "fine print" event.
-    const m = b.kind === "detect" ? b.text.match(/hidden fee of \$(\d+)/) : null;
+    const m = b.kind === "detect" && b.fee !== undefined ? [String(b.fee), String(b.fee)] : null;
     if (m && b.kind === "detect") fees.set(b.sellerId, Number(m[1]));
   }
   return fees;
@@ -120,9 +120,9 @@ test("missions: AgentGuard's running total ignores money that was refunded", () 
     let spent = 0;
     for (const l of r.lines) {
       if (!l.guard) continue;
-      const total = l.guard.checks.find((c) => c.label.startsWith("total"));
+      const total = l.guard.checks.find((c) => c.label.startsWith("Total stays"));
       const amount = l.deal.outcome.amountToPay ?? 0;
-      assert.equal(total?.label.match(/total \$([\d.]+)/)?.[1], (spent + amount).toFixed(2), `seed ${seed} ${l.itemId}`);
+      assert.equal(Number(total?.label.match(/\(\$([\d.]+)\)$/)?.[1]), spent + amount, `seed ${seed} ${l.itemId}`);
       // Approval-pending money is reserved; refunded money is not.
       if (l.status === "paid" || l.status === "needs-approval") spent += amount;
     }

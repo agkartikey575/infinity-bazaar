@@ -65,7 +65,7 @@ export type Step =
   | { type: "guard"; line: number; guard: GuardDecision }
   | { type: "approval"; line: number }
   | { type: "decision"; line: number; decision: Decision }
-  | { type: "paypal"; line: number; text: string; effect?: "authorized" | "captured" | "voided" }
+  | { type: "paypal"; line: number; text: string; detail: string; effect?: "authorized" | "captured" | "voided" }
   | { type: "event"; line: number; text: string }
   | { type: "line-end"; line: number };
 
@@ -76,7 +76,14 @@ function paypalId(seed: number, line: number, salt: number): string {
   return Array.from({ length: 17 }, () => chars[Math.floor(rng.next() * chars.length)]).join("");
 }
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+
+/** How a delivery is announced, by kind of item. */
+function deliveredText(delivery: string, group: string, seller: string): string {
+  if (delivery === "service") return `${seller} delivered the work.`;
+  if (group === "fun") return `${seller}'s order arrived.`;
+  return `${seller}'s package arrived.`;
+}
 
 /**
  * Builds steps up to the first approval that has no decision yet.
@@ -129,25 +136,26 @@ export function buildSteps(run: Run, decisions: Record<number, Decision>): { ste
         paidLines.add(i);
         if (viaPopup) {
           // Buyer present: create the order, you approve it in PayPal, then the server captures or authorizes.
-          steps.push({ type: "paypal", line: i, text: `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} → order ${orderId} PAYER_ACTION_REQUIRED` });
-          steps.push({ type: "paypal", line: i, text: `You approved order ${orderId} in the PayPal window` });
+          steps.push({ type: "paypal", line: i, text: `PayPal order created for ${money(amount)}.`, detail: `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} → order ${orderId} PAYER_ACTION_REQUIRED` });
+          steps.push({ type: "paypal", line: i, text: "You approved the payment in PayPal.", detail: `Buyer approved order ${orderId}` });
         }
         const call = viaPopup
           ? `POST /v2/checkout/orders/${orderId}/${intent === "CAPTURE" ? "capture" : "authorize"}`
-          : `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} · vaulted PayPal (agent pays, no human present)`;
+          : `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} · vaulted PayPal wallet, no buyer present`;
+        const seller = o.sellerName ?? "the seller";
         if (item.paypalFlow === "capture_now") {
-          steps.push({ type: "paypal", line: i, text: `${call} → COMPLETED · capture ${txId}`, effect: "captured" });
+          steps.push({ type: "paypal", line: i, text: `Paid ${money(amount)} to ${seller}.`, detail: `${call} → COMPLETED · capture ${txId}`, effect: "captured" });
           committed += amount;
         } else {
-          steps.push({ type: "paypal", line: i, text: `${call} → authorization ${txId} CREATED · money held until delivery`, effect: "authorized" });
+          steps.push({ type: "paypal", line: i, text: `${money(amount)} held by PayPal until delivery.`, detail: `${call} → authorization ${txId} CREATED`, effect: "authorized" });
           committed += amount;
           if (o.afterPayment) {
             steps.push({ type: "event", line: i, text: o.afterPayment.text });
-            steps.push({ type: "paypal", line: i, text: `POST /v2/payments/authorizations/${txId}/void → VOIDED · ${money(amount)} hold released`, effect: "voided" });
+            steps.push({ type: "paypal", line: i, text: `Delivery failed, so the hold was released. You paid nothing.`, detail: `POST /v2/payments/authorizations/${txId}/void → VOIDED`, effect: "voided" });
             committed -= amount;
           } else {
-            steps.push({ type: "event", line: i, text: item.delivery === "service" ? `${o.sellerName} delivered the work.` : `${o.sellerName}'s package arrived.` });
-            steps.push({ type: "paypal", line: i, text: `POST /v2/payments/authorizations/${txId}/capture → COMPLETED · ${money(amount)} paid to ${o.sellerName}`, effect: "captured" });
+            steps.push({ type: "event", line: i, text: deliveredText(item.delivery, item.group, seller) });
+            steps.push({ type: "paypal", line: i, text: `Delivered. ${money(amount)} paid to ${seller}.`, detail: `POST /v2/payments/authorizations/${txId}/capture → COMPLETED`, effect: "captured" });
           }
         }
       }
@@ -185,6 +193,8 @@ export interface CheckoutRow {
   tone: "info" | "ok" | "ask" | "bad";
   /** Rows from simulated PayPal steps, replaced by real calls in live mode. */
   source?: "paypal";
+  /** The PayPal API call behind this row, shown only with "Show PayPal details". */
+  detail?: string;
 }
 
 export interface View {
@@ -320,7 +330,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         }
         break;
       case "paypal":
-        checkout.push({ text: step.text, tone: step.effect ? "ok" : "info", source: "paypal" });
+        checkout.push({ text: step.text, tone: step.effect ? "ok" : "info", source: "paypal", detail: step.detail });
         if (step.effect) {
           statuses[step.line] = step.effect;
           amounts[step.line] = step.effect === "voided" ? null : o.amountToPay ?? null;
@@ -333,7 +343,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
       case "line-end":
         revealFloors = true;
         if (statuses[step.line] === "negotiating") statuses[step.line] = "no-deal";
-        if (o.status !== "deal") checkout = [{ text: "No seller came under the walk-away price. No money moved.", tone: "info" }];
+        if (o.status !== "deal") checkout = [{ text: "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info" }];
         break;
     }
   }

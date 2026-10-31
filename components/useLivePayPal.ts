@@ -26,7 +26,7 @@ type Action = "pay" | "complete" | "deliver";
 
 export interface LiveLine {
   state: LiveState;
-  rows: { text: string; debugId?: string | null }[];
+  rows: { text: string; detail?: string; debugId?: string | null }[];
   approveUrl?: string;
   error?: string;
   /** What to repeat when you press Retry. */

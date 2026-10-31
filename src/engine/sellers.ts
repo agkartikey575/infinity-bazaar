@@ -91,11 +91,11 @@ export interface Reply {
 const NO_TACTIC = new Set(["hidden-fee", "teaser-price"]);
 
 export const DETECT_LABEL: Record<string, string> = {
-  "false-urgency": "false urgency",
-  "phantom-buyer": "invented rival buyer",
+  "false-urgency": "fake deadline",
+  "phantom-buyer": "made-up rival buyer",
   "hidden-fee": "hidden fee",
   "teaser-price": "teaser price",
-  overpromise: "overpromise",
+  overpromise: "overpromising",
   upsell: "upsell",
 };
 
@@ -186,7 +186,7 @@ export function reply(s: Seller, offer: number | null, ctx: ReplyContext): Reply
         text: text.tactic(a, tactic, { upsell: s.upsellPrice ?? undefined }),
       });
       if (sellerData.detectable.includes(tactic)) {
-        beats.push({ kind: "detect", round, sellerId: s.id, tactic, text: `Detected: ${DETECT_LABEL[tactic] ?? tactic}` });
+        beats.push({ kind: "detect", round, sellerId: s.id, tactic, text: `Tactic spotted: ${DETECT_LABEL[tactic] ?? tactic}` });
       }
     }
   }

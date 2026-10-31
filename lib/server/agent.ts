@@ -8,10 +8,14 @@ import { committedCents, transition, type Ledger, type LedgerEntry, type RunRef 
 import { approveLink, paymentIds, paymentSucceeded, PayPalClient, PayPalError, type Order } from "./paypal.ts";
 
 export interface LogRow {
-  /** What happened, in one line, as shown in the checkout rail. */
+  /** What happened, in plain words, as shown in the payment panel. */
   text: string;
+  /** The PayPal API call behind it, shown only with "Show PayPal details". */
+  detail?: string;
   debugId?: string | null;
 }
+
+const usd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${toValue(cents as Cents)}`);
 
 export type PayResult =
   | { decision: "block"; guard: GuardDecision; ledger: Ledger; log: LogRow[] }
@@ -77,14 +81,20 @@ function settleOrder(ledger: Ledger, line: number, amount: number, order: Order,
     return {
       state: "declined" as const,
       ledger: transition(ledger, line, { state: "declined", amountCents: amount, orderId: order.id }),
-      log: [{ text: `${label} → payment ${ids.status ?? "missing"}. No money moved.`, debugId }],
+      log: [{ text: "PayPal declined the payment. No money moved.", detail: `${label} → payment ${ids.status ?? "missing"}`, debugId }],
     };
   }
   const state = intent === "CAPTURE" ? ("captured" as const) : ("authorized" as const);
   return {
     state,
     ledger: transition(ledger, line, { state, amountCents: amount, orderId: order.id, captureId: ids.captureId ?? undefined, authorizationId: ids.authorizationId ?? undefined }),
-    log: [{ text: `${label} → ${ids.status} · ${state === "captured" ? `capture ${ids.captureId}` : `authorization ${ids.authorizationId}: money held until delivery`}`, debugId }],
+    log: [
+      {
+        text: state === "captured" ? `Paid ${usd(amount)}.` : `${usd(amount)} held by PayPal until delivery.`,
+        detail: `${label} → ${ids.status} · ${state === "captured" ? `capture ${ids.captureId}` : `authorization ${ids.authorizationId}`}`,
+        debugId,
+      },
+    ],
   };
 }
 
@@ -114,7 +124,7 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     if (url) return { decision: "needs_paypal_approval", guard, ledger, log: [], orderId: own.orderId, approveUrl: url };
   }
 
-  const log: LogRow[] = [{ text: `AgentGuard (server): ${guard.summary}` }];
+  const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}` }];
   if (guard.decision === "block") {
     return { decision: "block", guard, ledger: transition(ledger, line, { state: "blocked", amountCents: amount }), log };
   }
@@ -153,13 +163,23 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
       state,
       guard,
       ledger: transition(ledger, line, entry),
-      log: [...log, { text: `(simulated) POST /v2/checkout/orders · intent ${intent} · $${toValue(amount)} → ${state === "captured" ? "COMPLETED" : "authorization CREATED"} · ${id}` }],
+      log: [
+        ...log,
+        {
+          text: state === "captured" ? `Paid ${usd(amount)} (demo mode).` : `${usd(amount)} held until delivery (demo mode).`,
+          detail: `Simulated: POST /v2/checkout/orders · intent ${intent} · $${toValue(amount)} → ${state === "captured" ? "COMPLETED" : "authorization CREATED"} · ${id}`,
+        },
+      ],
     };
   }
 
   const created = await ctx.paypal.createOrder(order, `${key}:create`);
   const orderId = created.data.id;
-  log.push({ text: `${created.label} · intent ${intent} · $${toValue(amount)}${useVault ? " · vaulted wallet" : ""} → ${created.data.status} · order ${orderId}`, debugId: created.debugId });
+  log.push({
+    text: useVault ? `Paying ${usd(amount)} from your connected PayPal wallet.` : `PayPal order created for ${usd(amount)}.`,
+    detail: `${created.label} · intent ${intent} · $${toValue(amount)}${useVault ? " · vaulted wallet" : ""} → ${created.data.status} · order ${orderId}`,
+    debugId: created.debugId,
+  });
 
   if (created.data.status === "COMPLETED") {
     const s = settleOrder(ledger, line, amount, created.data, intent, created.label, created.debugId);
@@ -237,18 +257,18 @@ export async function deliver(ref: RunRef, line: number, ledger: Ledger, paypal:
   const key = lineKey(ref, line);
   if (!paypal) {
     const state = failed ? "voided" : "captured";
-    return { state, ledger: transition(ledger, line, { state, amountCents: entry.amountCents }), log: [{ text: `(simulated) ${failed ? "void" : "capture"} of the hold → ${failed ? "VOIDED" : "COMPLETED"}` }] };
+    return { state, ledger: transition(ledger, line, { state, amountCents: entry.amountCents }), log: [{ text: failed ? "Delivery failed, so the hold was released (demo mode)." : "Delivered and paid (demo mode).", detail: `Simulated ${failed ? "void" : "capture"} of the hold` }] };
   }
   if (!entry.authorizationId) throw new Error(`line ${line} is authorized but has no authorization id`);
   if (failed) {
     const res = await paypal.voidAuthorization(entry.authorizationId, `${key}:void`);
-    return { state: "voided", ledger: transition(ledger, line, { state: "voided", amountCents: entry.amountCents }), log: [{ text: `${res.label} → VOIDED · hold released`, debugId: res.debugId }] };
+    return { state: "voided", ledger: transition(ledger, line, { state: "voided", amountCents: entry.amountCents }), log: [{ text: "Delivery failed, so the hold was released. You paid nothing.", detail: `${res.label} → VOIDED`, debugId: res.debugId }] };
   }
   const res = await paypal.captureAuthorization(entry.authorizationId, `${key}:capture-auth`);
   if (!paymentSucceeded(res.data.status)) throw new PayPalError(502, "CAPTURE_NOT_COMPLETED", `capture is ${res.data.status}`, null, res.debugId);
   return {
     state: "captured",
     ledger: transition(ledger, line, { state: "captured", amountCents: entry.amountCents, captureId: res.data.id }),
-    log: [{ text: `${res.label} → ${res.data.status} · capture ${res.data.id}`, debugId: res.debugId }],
+    log: [{ text: `Delivered. ${usd(entry.amountCents)} paid to the seller.`, detail: `${res.label} → ${res.data.status} · capture ${res.data.id}`, debugId: res.debugId }],
   };
 }

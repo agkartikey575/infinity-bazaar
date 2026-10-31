@@ -43,45 +43,56 @@ export interface PaymentRequest {
   rules: GuardRules;
 }
 
-const usd = (n: number) => `$${n.toFixed(2)}`;
+/** Whole dollars read as "$47", anything else as "$19.99". */
+const usd = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
 
 export function checkPayment(p: PaymentRequest): GuardDecision {
   const { amount, spentSoFar, rules } = p;
   const total = spentSoFar + amount;
-  const checks: GuardCheck[] = [
-    { label: `${usd(amount)} is a valid amount in whole cents`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6 },
-    { label: `currency is USD`, pass: (p.currency ?? "USD") === "USD" },
-    { label: `${usd(amount)} ≤ item cap ${rules.itemCapUsd === undefined ? "(none)" : usd(rules.itemCapUsd)}`, pass: rules.itemCapUsd === undefined || amount <= rules.itemCapUsd },
-    { label: `total ${usd(total)} ≤ budget ${usd(rules.budgetUsd)}`, pass: total <= rules.budgetUsd },
-    { label: `${p.sellerName} is an allowed seller`, pass: !(rules.blockedSellerIds ?? []).includes(p.sellerId) },
-    { label: `item category is allowed`, pass: !rules.allowedGroups || !p.group || rules.allowedGroups.includes(p.group) },
-    { label: `not already paid`, pass: !p.alreadyPaid },
-    { label: `matches the agreed price${p.agreedAmount === undefined ? "" : ` ${usd(p.agreedAmount)}`}`, pass: p.agreedAmount === undefined || p.agreedAmount === amount },
+  // Each rule: what it says when it passes, and why it stops the payment when it fails.
+  const rows: { label: string; pass: boolean; why: string }[] = [
+    { label: `Amount is valid (${usd(amount)})`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6, why: "the amount isn't valid" },
+    { label: "Paid in US dollars", pass: (p.currency ?? "USD") === "USD", why: "it isn't in US dollars" },
+    {
+      label: rules.itemCapUsd === undefined ? "No limit set for this item" : `Within the ${usd(rules.itemCapUsd)} limit for this item`,
+      pass: rules.itemCapUsd === undefined || amount <= rules.itemCapUsd,
+      why: `${usd(amount)} is over the ${usd(rules.itemCapUsd ?? 0)} limit for this item`,
+    },
+    { label: `Total stays within your ${usd(rules.budgetUsd)} budget (${usd(total)})`, pass: total <= rules.budgetUsd, why: `it would take you to ${usd(total)}, over your ${usd(rules.budgetUsd)} budget` },
+    { label: `${p.sellerName} is an allowed seller`, pass: !(rules.blockedSellerIds ?? []).includes(p.sellerId), why: `${p.sellerName} is on your blocked list` },
+    { label: "Item is on your shopping list", pass: !rules.allowedGroups || !p.group || rules.allowedGroups.includes(p.group), why: "this kind of item isn't on your shopping list" },
+    { label: "Not paid already", pass: !p.alreadyPaid, why: "it's already been paid" },
+    {
+      label: `Matches the agreed price${p.agreedAmount === undefined ? "" : ` (${usd(p.agreedAmount)})`}`,
+      pass: p.agreedAmount === undefined || p.agreedAmount === amount,
+      why: "it doesn't match the agreed price",
+    },
   ];
-  if (checks.some((c) => !c.pass)) {
-    const failed = checks.filter((c) => !c.pass).map((c) => c.label);
-    return { decision: "block", checks, summary: `BLOCKED: failed ${failed.join("; ")}. No call to PayPal was made.` };
+  const checks: GuardCheck[] = rows.map(({ label, pass }) => ({ label, pass }));
+  const failed = rows.filter((r) => !r.pass);
+  if (failed.length) {
+    return { decision: "block", checks, summary: `Blocked because ${failed.map((r) => r.why).join(" and ")}. Nothing was sent to PayPal.` };
   }
 
   const reasons: string[] = [];
   const overLine = amount > rules.askAboveUsd;
-  checks.push({ label: `${usd(amount)} ≤ ask-me line ${usd(rules.askAboveUsd)}`, pass: !overLine });
-  if (overLine) reasons.push(`${usd(amount)} is above your ${usd(rules.askAboveUsd)} ask-me line`);
+  checks.push({ label: `Under your ${usd(rules.askAboveUsd)} approval limit`, pass: !overLine });
+  if (overLine) reasons.push(`${usd(amount)} is over your ${usd(rules.askAboveUsd)} approval limit`);
   if (p.surpriseFee) {
-    checks.push({ label: `no fee sprung at checkout`, pass: false });
-    reasons.push(`a fee only came out at checkout`);
+    checks.push({ label: "No surprise fees at checkout", pass: false });
+    reasons.push("the seller added a fee at checkout");
   }
   if (p.laterFee) {
-    checks.push({ label: `no later charges`, pass: false });
-    reasons.push(`it commits you to ${usd(p.laterFee)} later`);
+    checks.push({ label: "No extra charges later", pass: false });
+    reasons.push(`it adds ${usd(p.laterFee)} in charges later`);
   }
   if (rules.reserveUsd) {
     const room = rules.budgetUsd - rules.reserveUsd;
     const dips = total > room;
-    checks.push({ label: `keeps the ${usd(rules.reserveUsd)} reserve`, pass: !dips });
-    if (dips) reasons.push(`it dips into your ${usd(rules.reserveUsd)} reserve`);
+    checks.push({ label: `Keeps your ${usd(rules.reserveUsd)} safety reserve`, pass: !dips });
+    if (dips) reasons.push(`it dips into your ${usd(rules.reserveUsd)} safety reserve`);
   }
   return reasons.length
-    ? { decision: "ask_user", checks, summary: `ASKING YOU: ${reasons.join(" and ")}.` }
-    : { decision: "approve", checks, summary: `APPROVED: all checks passed.` };
+    ? { decision: "ask_user", checks, summary: `Needs your OK because ${reasons.join(" and ")}.` }
+    : { decision: "approve", checks, summary: "Approved. It fits your budget and rules." };
 }

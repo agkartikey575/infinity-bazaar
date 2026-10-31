@@ -18,7 +18,7 @@ function knownFees(d: DealResult) {
   const note = (id: string, usd: number) => fees.set(id, { usd, now: Boolean(item.hiddenFees.find((f) => f.valueUsd === usd)?.payNow) });
   for (const b of d.beats) {
     if (b.kind === "seller" && (b.move === "reveal-fee" || b.move === "surprise-fee") && b.price !== undefined) note(b.sellerId, b.price);
-    const m = b.kind === "detect" ? b.text.match(/hidden fee of \$(\d+)/) : null;
+    const m = b.kind === "detect" && b.fee !== undefined ? [String(b.fee), String(b.fee)] : null;
     if (m && b.kind === "detect") note(b.sellerId, Number(m[1]));
   }
   return fees;

@@ -154,7 +154,7 @@ export type Beat =
       lever?: Lever;
       text: string;
     }
-  | { kind: "detect"; round: number; sellerId: string; tactic: string; text: string }
+  | { kind: "detect"; round: number; sellerId: string; tactic: string; text: string; fee?: number; feeLabel?: string }
   | { kind: "event"; round: number; eventId: string; sellerId: string; text: string }
   | { kind: "commentary"; round: number; text: string };
 

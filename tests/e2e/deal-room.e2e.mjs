@@ -71,7 +71,7 @@ async function checkSheet(page, viewport) {
 }
 
 // Expected outcomes come from the engine itself, so this test follows engine changes.
-const LABEL = { captured: "Paid", declined: "Declined", voided: "Hold voided", blocked: "Blocked", "no-deal": "Walked away" };
+const LABEL = { captured: "Paid", declined: "Declined", voided: "Hold released", blocked: "Blocked", "no-deal": "Walked away" };
 function expected(seed, answer) {
   const run = buildMissionRun("hackathon-10-days", seed);
   const decisions = {};
@@ -86,7 +86,7 @@ function expected(seed, answer) {
 }
 const firstSeed = (pred) => Array.from({ length: 400 }, (_, i) => i + 1).find(pred);
 const askSeed = firstSeed((s) => buildSteps(buildMissionRun("hackathon-10-days", s), {}).waitingFor !== null);
-const voidSeed = firstSeed((s) => expected(s, "approved").pills.includes("Hold voided"));
+const voidSeed = firstSeed((s) => expected(s, "approved").pills.includes("Hold released"));
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 640 }]) {
   const w = viewport.width;
@@ -103,6 +103,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await page.locator("header button.primary").textContent(), /Replay/);
     assert.deepEqual(await pills(page), exp.pills);
     assert.equal(await page.locator(".floor").count(), 3, "hidden floors revealed");
+    assert.doesNotMatch(await page.locator(".checkout").innerText(), /POST \/v2\//, "API details hidden by default");
+    await page.getByLabel("Show PayPal details").check();
     assert.match(await page.locator(".checkout").innerText(), /POST \/v2\//);
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
     assert.equal(await page.locator(".receipt tbody tr").count(), exp.pills.length, "receipt lists every item");
@@ -148,9 +150,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await table(page, voidSeed);
     await playToEnd(page, "approved");
     assert.deepEqual(await pills(page), exp.pills);
-    const i = exp.pills.indexOf("Hold voided");
+    const i = exp.pills.indexOf("Hold released");
     assert.equal((await amounts(page))[i], "—");
-    assert.match(await page.locator(".receipt").innerText(), /Hold voided/);
+    assert.match(await page.locator(".receipt").innerText(), /Hold released/);
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
   });
 
@@ -162,8 +164,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.equal(await page.locator(".stamp").count(), 1, "blocked stamp");
     assert.match(await page.locator(".caster").innerText(), /[Bb]locked/);
     const checkout = await page.locator(".checkout").innerText();
-    assert.match(checkout, /BLOCKED/);
-    assert.doesNotMatch(checkout, /POST /);
+    assert.match(checkout, /Blocked because/);
+    assert.doesNotMatch(checkout, /POST |PayPal order|Paid \$/);
     assert.match(await bnums(page), /Paid \$0/);
     await btn(page, /New table/).click();
     await skip(page);

@@ -58,9 +58,9 @@ function checkRun(run: Run, tag: string) {
     run.lines.forEach((l, i) => {
       const g = guardOf(steps, i);
       if (g) {
-        const label = g.checks.find((c) => c.label.startsWith("total"))?.label ?? "";
+        const label = g.checks.find((c) => c.label.startsWith("Total stays"))?.label ?? "";
         const amount = l.deal.outcome.amountToPay ?? 0;
-        assert.ok(label.includes(`total $${(committed + amount).toFixed(2)}`), `${tag} line ${i}: "${label}" vs committed ${committed}`);
+        assert.equal(Number(label.match(/\(\$([\d.]+)\)$/)?.[1]), committed + amount, `${tag} line ${i}: "${label}" vs committed ${committed}`);
       }
       if (end.statuses[i] === "captured") committed += l.deal.outcome.amountToPay ?? 0;
     });
@@ -121,7 +121,7 @@ test("timeline: a failed delivery voids the hold and frees the money", () => {
       found++;
       assert.equal(end.statuses[0], "voided", `${item.id}#${seed}`);
       assert.equal(end.committedUsd, 0);
-      assert.ok(steps.some((s) => s.type === "paypal" && s.text.includes("/void")), `${item.id}#${seed}: void call shown`);
+      assert.ok(steps.some((s) => s.type === "paypal" && s.detail.includes("/void")), `${item.id}#${seed}: void call shown`);
     }
   }
   assert.ok(found > 0, "some deal has a failed delivery");
@@ -136,6 +136,6 @@ test("timeline: held payments are captured only after delivery", () => {
     const auth = pp.findIndex((s) => s.effect === "authorized");
     const cap = pp.findIndex((s) => s.effect === "captured");
     assert.ok(auth >= 0, `seed ${seed}: shipped item is authorized first`);
-    if (cap >= 0) assert.ok(cap > auth && pp[cap].text.includes("/authorizations/"), `seed ${seed}: capture follows the hold`);
+    if (cap >= 0) assert.ok(cap > auth && pp[cap].detail.includes("/authorizations/"), `seed ${seed}: capture follows the hold`);
   }
 });

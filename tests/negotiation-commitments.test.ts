@@ -14,7 +14,7 @@ function nowFeeTracker(d: DealResult) {
   const fee = new Map<string, number>();
   return {
     see(b: DealResult["beats"][number]) {
-      const m = b.kind === "detect" ? b.text.match(/hidden fee of \$(\d+): (.+)$/) : null;
+      const m = b.kind === "detect" && b.fee !== undefined ? ["", String(b.fee), b.feeLabel ?? ""] : null;
       if (m && b.kind === "detect") fee.set(b.sellerId, item.hiddenFees.find((f) => f.label === m[2])?.payNow ? Number(m[1]) : 0);
     },
     get: (id: string) => fee.get(id) ?? 0,

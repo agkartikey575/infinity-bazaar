@@ -54,6 +54,8 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .field.table-no { width: 110px; }
 .paypal-mode { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .switch { display: inline-flex; gap: 8px; align-items: center; font: 600 14px var(--body); }
+.row-detail { margin-top: 4px; font: 11.5px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.details-toggle { font-size: 12px; color: var(--muted); }
 .switch input { width: 18px; height: 18px; accent-color: var(--brass); }
 .btns { display: flex; flex-wrap: wrap; gap: 8px; }
 
