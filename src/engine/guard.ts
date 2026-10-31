@@ -54,7 +54,7 @@ export function checkPayment(p: PaymentRequest): GuardDecision {
   const total = (c(spentSoFar) + c(amount)) / 100;
   // Each rule: what it says when it passes, and why it stops the payment when it fails.
   const rows: { label: string; pass: boolean; why: string }[] = [
-    { label: `Amount is valid (${usd(amount)})`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6, why: "the amount isn't valid" },
+    { label: `Price is a real amount (${usd(amount)})`, pass: Number.isFinite(amount) && amount > 0 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6, why: "the amount isn't valid" },
     { label: "Paid in US dollars", pass: (p.currency ?? "USD") === "USD", why: "it isn't in US dollars" },
     {
       label: rules.itemCapUsd === undefined ? "No limit set for this item" : `Within the ${usd(rules.itemCapUsd)} limit for this item`,
@@ -64,7 +64,7 @@ export function checkPayment(p: PaymentRequest): GuardDecision {
     { label: `Total stays within your ${usd(rules.budgetUsd)} budget (${usd(total)})`, pass: c(total) <= c(rules.budgetUsd), why: `it would take you to ${usd(total)}, over your ${usd(rules.budgetUsd)} budget` },
     { label: `${p.sellerName} is an allowed seller`, pass: !(rules.blockedSellerIds ?? []).includes(p.sellerId), why: `${p.sellerName} is on your blocked list` },
     { label: "Item is on your shopping list", pass: !rules.allowedGroups || !p.group || rules.allowedGroups.includes(p.group), why: "this kind of item isn't on your shopping list" },
-    { label: "Not paid already", pass: !p.alreadyPaid, why: "it's already been paid" },
+    { label: "Not a double payment", pass: !p.alreadyPaid, why: "it's already been paid" },
     {
       label: `Matches the agreed price${p.agreedAmount === undefined ? "" : ` (${usd(p.agreedAmount)})`}`,
       pass: p.agreedAmount === undefined || c(p.agreedAmount) === c(amount),

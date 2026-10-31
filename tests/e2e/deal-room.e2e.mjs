@@ -52,7 +52,7 @@ async function table(page, seed) {
 async function playToEnd(page, answer) {
   for (let i = 0; i < 12; i++) {
     if (await page.getByRole("dialog").count()) {
-      await btn(page, answer === "approved" ? "Approve in PayPal" : "Decline").click();
+      await btn(page, answer === "approved" ? "Approve" : "Decline").click();
       await page.waitForTimeout(150);
     } else if (await btn(page, /Skip/).isDisabled()) break;
     else await skip(page);
@@ -63,7 +63,7 @@ async function checkSheet(page, viewport) {
   const sheet = page.getByRole("dialog");
   assert.equal(await sheet.count(), 1, "approval sheet shown");
   assert.match(await page.evaluate(() => document.activeElement?.textContent ?? ""), /Approve/, "Approve has focus");
-  for (const name of ["Approve in PayPal", "Decline"]) {
+  for (const name of ["Approve", "Decline"]) {
     const box = await btn(page, name).boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height, `${name} is inside the viewport`);
   }
@@ -122,7 +122,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await table(page, askSeed);
     await skip(page);
     await checkSheet(page, viewport);
-    assert.match(await page.getByRole("dialog").innerText(), new RegExp(`Pay \\$${first}\\.00`));
+    assert.match(await page.getByRole("dialog").innerText(), new RegExp(`Pay \\$${(Number.isInteger(first) ? String(first) : first.toFixed(2)).replace(".", "\\.")}\\b`));
     assert.match(await bnums(page), new RegExp(`Waiting \\$${first}\\b`));
     await playToEnd(page, "approved");
     assert.deepEqual(await pills(page), exp.pills);

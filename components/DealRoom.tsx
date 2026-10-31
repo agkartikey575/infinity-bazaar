@@ -31,7 +31,9 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   voided: "Hold released",
 };
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+/** Table numbers the server accepts. */
+const MAX_TABLE = 999_999_999;
 
 function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
   let paid = 0;
@@ -94,7 +96,7 @@ export default function DealRoom() {
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(2);
   const approveRef = useRef<HTMLButtonElement>(null);
   const [showDetails, setShowDetails] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -268,7 +270,7 @@ export default function DealRoom() {
 
   const applySeed = () => {
     const n = Math.floor(Number(seedDraft));
-    if (Number.isFinite(n) && n >= 1 && n !== seed) restart({ seed: n, rogue });
+    if (Number.isFinite(n) && n >= 1 && n <= MAX_TABLE && n !== seed) restart({ seed: n, rogue });
     else setSeedDraft(String(seed));
   };
 
@@ -455,7 +457,7 @@ export default function DealRoom() {
           <div className="budget">
             <span className="label">Budget</span>
             <div className="bbar">
-              <span className="sr-only">Committed ${view.committedUsd} of ${run.budgetUsd}</span>
+              <span className="sr-only">Spent ${view.committedUsd} of ${run.budgetUsd}</span>
               <div className="bfill" style={{ transform: `scaleX(${capturedShare / 100})` }} />
               <div className="bheld" style={{ transform: `translateX(${capturedShare}%) scaleX(${heldShare / 100})` }} />
               <div className="bpending" style={{ transform: `translateX(${capturedShare + heldShare}%) scaleX(${pendingShare / 100})` }} />
@@ -573,7 +575,9 @@ export default function DealRoom() {
             )}
             {live.enabled && live.lines[view.line]?.state === "error" && (
               <div className="row-bad">
-                PayPal didn't respond as expected. Retry checks with PayPal first, so nothing is charged twice.{" "}
+                {live.lines[view.line]?.errorFrom === "paypal"
+                  ? "PayPal didn't respond as expected. Retry checks with PayPal first, so nothing is charged twice."
+                  : "Something went wrong with this payment. Nothing new was charged. Press Retry, or start a new table."}{" "}
                 {showDetails && <span className="row-detail">{live.lines[view.line]?.error}</span>}{" "}
                 <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>
@@ -641,7 +645,7 @@ export default function DealRoom() {
             </dl>
             <div className="btns">
               <button ref={approveRef} className="primary" onClick={() => decide("approved")}>
-                Approve in PayPal
+                {live.enabled ? "Approve in PayPal" : "Approve"}
               </button>
               <button onClick={() => decide("declined")}>Decline</button>
             </div>

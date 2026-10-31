@@ -31,6 +31,8 @@ export interface LiveLine {
   error?: string;
   /** What to repeat when you press Retry. */
   failed?: Action;
+  /** Whether PayPal or our own server reported the error. */
+  errorFrom?: "paypal" | "app";
   userApproved?: boolean;
   /** PayPal accepted the payment but is still reviewing it: not shown as paid yet. */
   review?: boolean;
@@ -89,8 +91,8 @@ export function useLivePayPal(run: RunRef) {
       .then((r) => (r.ok ? r.json() : null))
       .then((s: Status | null) => {
         if (s) {
+          // Demo mode first: live sandbox payments need a PayPal sandbox login, so you switch them on yourself.
           setStatus(s);
-          setEnabled(s.mode === "sandbox");
         }
       })
       .catch(() => undefined); // static hosting: no API, stay simulated
@@ -120,7 +122,7 @@ export function useLivePayPal(run: RunRef) {
         body: JSON.stringify({ run, line, ledger: ledger.current, ...extra }),
       });
       const data = await res.json().catch(() => ({ error: res.statusText }));
-      if (!res.ok) throw new Error(`${data.error ?? res.statusText}${data.debugId ? ` · PayPal debug id ${data.debugId}` : ""}`);
+      if (!res.ok) throw Object.assign(new Error(`${data.error ?? res.statusText}${data.debugId ? ` · PayPal debug id ${data.debugId}` : ""}`), { fromPayPal: res.status === 502 });
       if (data.ledger) ledger.current = data.ledger;
       return data;
     },
@@ -135,7 +137,9 @@ export function useLivePayPal(run: RunRef) {
     try {
       await fn();
     } catch (e) {
-      set(line, { state: "error", failed: action, error: e instanceof Error ? e.message : String(e) });
+      // A network failure reaching our own server reads as "app"; only PayPal's own errors (502) blame PayPal.
+      const fromPayPal = (e as { fromPayPal?: boolean })?.fromPayPal === true;
+      set(line, { state: "error", failed: action, errorFrom: fromPayPal ? "paypal" : "app", error: e instanceof Error ? e.message : String(e) });
     } finally {
       busy.current.delete(line);
     }

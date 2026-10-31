@@ -11,7 +11,7 @@ import { planBuyer } from "./buyer.ts";
 import { events as allEvents, getItem } from "./data.ts";
 import { createRng, type Rng } from "./rng.ts";
 import { allIn, laterFee, payNowFee, rank, reply, spawnSellers, trueCost } from "./sellers.ts";
-import { join, Writer } from "./text.ts";
+import { fill, join, Writer } from "./text.ts";
 import type { Beat, CatalogItem, DealOutcome, DealResult, GameEvent, Seller, SellerMemory } from "./types.ts";
 
 export interface DealOptions {
@@ -138,7 +138,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
       amountToPay: total,
       savedVsTypical: saved,
       rogue: opt.rogue || undefined,
-      afterPayment: afterPayment && !opt.rogue ? { eventId: afterPayment.id, text: afterPayment.text.replace("{seller}", s.name) } : null,
+      afterPayment: afterPayment && !opt.rogue ? { eventId: afterPayment.id, text: fill(afterPayment.text, { seller: s.name }) } : null,
     };
   };
 
@@ -385,7 +385,7 @@ export function runDeal(itemId: string, opts: DealOptions = {}): DealResult {
     if (!eligible.length) return;
     const s = rng.pick(eligible);
     const a = s.archetype.id;
-    const evText = event.text.replace("{seller}", s.name);
+    const evText = fill(event.text, { seller: s.name });
     beats.push({ kind: "event", round, eventId: event.id, sellerId: s.id, text: evText });
     comment(round, text.commentary("event", { text: evText }));
     switch (fx.type) {

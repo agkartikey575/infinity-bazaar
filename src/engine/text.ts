@@ -43,7 +43,8 @@ export type Vars = Record<string, string | number | undefined>;
 export function fill(template: string, vars: Vars): string {
   const out = template.replace(/\{(\w+)\}/g, (m, key: string) => (vars[key] === undefined ? m : String(vars[key])));
   // A placeholder can open a sentence ("{lever}? Sure"): capitalise sentence starts.
-  return out.replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, ch: string) => lead + ch.toUpperCase());
+  // Names that are already possessive ("Mama Lucia's") don't take another "'s".
+  return out.replace(/'s's\b/g, "'s").replace(/(^|[.!?]\s+)([a-z])/g, (_, lead: string, ch: string) => lead + ch.toUpperCase());
 }
 
 /** Per-deal writer: picks fresh lines and avoids repeating one within the same deal. */

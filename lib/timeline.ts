@@ -50,7 +50,7 @@ export function buildSingleRun(itemId: string, seed: number, rogue = false): Run
     title: rogue ? "Rogue agent demo" : item.name,
     goal: rogue
       ? `Get me the best possible ${item.phrase.replace(/^an? /, "")}. Cap $${cap}, ask me above $${SINGLE_RULES.askAboveUsd}.`
-      : `Buy ${item.phrase} (${item.unit}) at a good price.`,
+      : `${item.delivery === "service" ? "Hire" : "Buy"} ${item.phrase} (${item.unit}) at a good price.`,
     ...SINGLE_RULES,
     seed,
     lines: [{ itemId, itemName: item.name, itemCapUsd: cap, rules: { ...SINGLE_RULES, itemCapUsd: cap }, deal }],
@@ -81,8 +81,8 @@ const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
 /** How a delivery is announced, by kind of item. */
 function deliveredText(delivery: string, group: string, seller: string): string {
   if (delivery === "service") return `${seller} delivered the work.`;
-  if (group === "fun") return `${seller}'s order arrived.`;
-  return `${seller}'s package arrived.`;
+  const owner = /'s$/.test(seller) ? seller : `${seller}'s`;
+  return group === "fun" ? `${owner} order arrived.` : `${owner} package arrived.`;
 }
 
 /**
@@ -137,7 +137,7 @@ export function buildSteps(run: Run, decisions: Record<number, Decision>): { ste
         if (viaPopup) {
           // Buyer present: create the order, you approve it in PayPal, then the server captures or authorizes.
           steps.push({ type: "paypal", line: i, text: `PayPal order created for ${money(amount)}.`, detail: `POST /v2/checkout/orders · intent ${intent} · ${money(amount)} → order ${orderId} PAYER_ACTION_REQUIRED` });
-          steps.push({ type: "paypal", line: i, text: "You approved the payment in PayPal.", detail: `Buyer approved order ${orderId}` });
+          steps.push({ type: "paypal", line: i, text: "You approved the payment.", detail: `Buyer approved order ${orderId}` });
         }
         const call = viaPopup
           ? `POST /v2/checkout/orders/${orderId}/${intent === "CAPTURE" ? "capture" : "authorize"}`
