@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated": "2026-10-30",
-  "note": "Prices are USD estimates (confidence=estimate). verifyQuery is a search phrase for checking each price.",
+  "updated": "2026-10-31",
+  "note": "Prices are USD. confidence=researched means the range comes from the listed source pages (price.sources, checked price.asOf); confidence=estimate means no source was found. verifyQuery is a search phrase for checking each price.",
   "groups": [
     {
       "id": "online",
@@ -37,9 +37,24 @@
       "price": {
         "currency": "USD",
         "low": 10,
-        "typical": 14,
-        "high": 20,
-        "confidence": "estimate"
+        "typical": 13,
+        "high": 21,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Porkbun .dev price on Domainoffer (first year $9.81, renewal $12.87)",
+            "url": "https://domainoffer.net/tld/dev/porkbun"
+          },
+          {
+            "title": ".dev price comparison across registrars (Namecheap renewal $21.18, Cloudflare $12.20)",
+            "url": "https://costgoat.com/compare/domains/dev"
+          },
+          {
+            "title": "Porkbun domain cost calculator for .dev",
+            "url": "https://porkbun.com/about/domain-cost-calculator/dev"
+          }
+        ]
       },
       "verifyQuery": ".dev domain name 1 year price",
       "seller": {
@@ -50,8 +65,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          5.63,
-          8.86
+          5.23,
+          8.22
         ]
       },
       "sellerTypes": [
@@ -92,10 +107,21 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 24,
-        "typical": 60,
-        "high": 120,
-        "confidence": "estimate"
+        "low": 23,
+        "typical": 45,
+        "high": 144,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Namecheap shared hosting (Stellar $22.88 first year, renews $44.88)",
+            "url": "https://NameCheap.com/hosting/shared"
+          },
+          {
+            "title": "Hostinger pricing 2026 (Premium from $2.99/mo, $10.99-11.99/mo standard)",
+            "url": "https://www.websitebuilderexpert.com/web-hosting/hostinger-pricing/"
+          }
+        ]
       },
       "verifyQuery": "Starter web hosting 1 year price",
       "seller": {
@@ -106,8 +132,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          24.15,
-          37.95
+          18.11,
+          28.46
         ]
       },
       "sellerTypes": [
@@ -136,7 +162,7 @@
         {
           "id": "renewal",
           "label": "renewal at full list price",
-          "valueUsd": 15,
+          "valueUsd": 22,
           "payNow": false,
           "kind": "later"
         },
@@ -160,10 +186,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 24,
-        "typical": 38,
-        "high": 70,
-        "confidence": "estimate"
+        "low": 23,
+        "typical": 48,
+        "high": 144,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Namecheap shared hosting with a domain offer ($22.88 first year)",
+            "url": "https://NameCheap.com/hosting/shared"
+          },
+          {
+            "title": "Hostinger Premium 12 months $47.88 with free domain (regular $143.88)",
+            "url": "https://bloggerspassion.com/best-web-hosting/hostinger-pricing-plans-explained/"
+          },
+          {
+            "title": "Hostinger: how to get a free domain",
+            "url": "https://www.hostinger.com/support/1583407-how-to-register-a-domain-for-free/"
+          }
+        ]
       },
       "verifyQuery": "Domain and hosting bundle 1 year price",
       "seller": {
@@ -174,8 +215,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          15.29,
-          24.04
+          19.32,
+          30.36
         ]
       },
       "sellerTypes": [
@@ -204,7 +245,7 @@
         {
           "id": "renewal",
           "label": "renewal price far above first-year price",
-          "valueUsd": 12,
+          "valueUsd": 14,
           "payNow": false,
           "kind": "later"
         }
@@ -224,7 +265,18 @@
         "low": 40,
         "typical": 50,
         "high": 55,
-        "confidence": "estimate"
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "OpenAI prepaid billing (credits at face value, $5 minimum, expire after 1 year)",
+            "url": "https://help.openai.com/en/articles/8264778-what-is-prepaid-billing?app=1"
+          },
+          {
+            "title": "Anthropic: paying for Claude API usage with prepaid credits",
+            "url": "https://support.claude.com/en/articles/8977456-how-do-i-pay-for-my-claude-api-usage"
+          }
+        ]
       },
       "verifyQuery": "AI API credits $50 of credits price",
       "seller": {
@@ -278,9 +330,20 @@
       "price": {
         "currency": "USD",
         "low": 15,
-        "typical": 30,
+        "typical": 57,
         "high": 75,
-        "confidence": "estimate"
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Supabase pricing (Pro $25/month)",
+            "url": "https://supabase.com/pricing"
+          },
+          {
+            "title": "Neon pricing (Launch from about $19/month, usage-based)",
+            "url": "https://neon.com/pricing"
+          }
+        ]
       },
       "verifyQuery": "Managed database plan 3 months price",
       "seller": {
@@ -291,8 +354,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          12.07,
-          18.97
+          22.94,
+          36.05
         ]
       },
       "sellerTypes": [
@@ -304,19 +367,19 @@
         {
           "id": "storage",
           "label": "double storage",
-          "valueUsd": 10
+          "valueUsd": 15
         },
         {
           "id": "backups",
           "label": "point-in-time backups",
-          "valueUsd": 8
+          "valueUsd": 15
         }
       ],
       "hiddenFees": [
         {
           "id": "egress",
           "label": "data transfer billed separately",
-          "valueUsd": 12,
+          "valueUsd": 15,
           "payNow": false,
           "kind": "conditional"
         }
@@ -333,10 +396,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 10,
-        "typical": 20,
-        "high": 45,
-        "confidence": "estimate"
+        "low": 45,
+        "typical": 60,
+        "high": 105,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Postmark pricing (10,000 emails for $15/month)",
+            "url": "https://postmarkapp.com/pricing.txt"
+          },
+          {
+            "title": "Resend pricing (Pro $20/month for 50,000 emails)",
+            "url": "https://www.resend.com/pricing.md"
+          },
+          {
+            "title": "SendGrid pricing 2026 (Essentials $19.95/month)",
+            "url": "https://www.usecarly.com/blog/sendgrid-pricing/"
+          }
+        ]
       },
       "verifyQuery": "Transactional email service 3 months price",
       "seller": {
@@ -347,8 +425,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          8.05,
-          12.65
+          24.15,
+          37.95
         ]
       },
       "sellerTypes": [
@@ -360,19 +438,19 @@
         {
           "id": "volume",
           "label": "higher sending limit",
-          "valueUsd": 8
+          "valueUsd": 15
         },
         {
           "id": "domain-setup",
           "label": "free domain verification help",
-          "valueUsd": 5
+          "valueUsd": 10
         }
       ],
       "hiddenFees": [
         {
           "id": "overage",
           "label": "overage fees past the limit",
-          "valueUsd": 10,
+          "valueUsd": 15,
           "payNow": false,
           "kind": "conditional"
         }
@@ -389,10 +467,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 12,
-        "typical": 30,
-        "high": 60,
-        "confidence": "estimate"
+        "low": 84,
+        "typical": 108,
+        "high": 156,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "UptimeRobot pricing",
+            "url": "https://uptimerobot.com/pricing.md"
+          },
+          {
+            "title": "UptimeRobot pricing 2026 (Solo about $9/month billed annually)",
+            "url": "https://notifier.so/guides/uptimerobot-pricing-2026/"
+          },
+          {
+            "title": "UptimeRobot pricing review, Aug 2026 (Solo $12-13/month)",
+            "url": "https://hyperping.com/blog/uptimerobot-pricing"
+          }
+        ]
       },
       "verifyQuery": "Uptime monitoring 1 year price",
       "seller": {
@@ -403,8 +496,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          12.07,
-          18.97
+          43.47,
+          68.31
         ]
       },
       "sellerTypes": [
@@ -416,12 +509,12 @@
         {
           "id": "sms",
           "label": "SMS alerts",
-          "valueUsd": 8
+          "valueUsd": 24
         },
         {
           "id": "status-page",
           "label": "public status page",
-          "valueUsd": 10
+          "valueUsd": 24
         }
       ],
       "hiddenFees": []
@@ -438,9 +531,20 @@
       "price": {
         "currency": "USD",
         "low": 12,
-        "typical": 36,
-        "high": 72,
-        "confidence": "estimate"
+        "typical": 48,
+        "high": 101,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Zoho Mail pricing (Mail Lite $1, Mail Premium $4 per user/month)",
+            "url": "https://www.capterra.com/p/174694/Zoho-Mail/pricing/"
+          },
+          {
+            "title": "Google Workspace pricing 2026 (Business Starter $7 annual, $8.40 monthly)",
+            "url": "https://www.cloudwards.net/google-workspace-plans-and-pricing/"
+          }
+        ]
       },
       "verifyQuery": "Custom-domain email inbox 1 year price",
       "seller": {
@@ -451,8 +555,8 @@
         ],
         "minMargin": 0.15,
         "floorRange": [
-          14.49,
-          22.77
+          19.32,
+          30.36
         ]
       },
       "sellerTypes": [
@@ -494,9 +598,24 @@
       "price": {
         "currency": "USD",
         "low": 19,
-        "typical": 49,
-        "high": 129,
-        "confidence": "estimate"
+        "typical": 35,
+        "high": 299,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "ThemeForest admin dashboard template, Regular License $35",
+            "url": "https://themeforest.net/item/infinio-bootstrap-4-admin-dashboard-template/21824011"
+          },
+          {
+            "title": "ThemeForest admin template, Regular License $19",
+            "url": "https://themeforest.net/item/epic-able-bootstrap-admin-dashboard-template/25795605"
+          },
+          {
+            "title": "Tailwind Plus, one-time $299",
+            "url": "https://tailwindcss.com/plus"
+          }
+        ]
       },
       "verifyQuery": "UI template pack 1 license price",
       "seller": {
@@ -507,8 +626,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          14.7,
-          26.46
+          10.5,
+          18.9
         ]
       },
       "sellerTypes": [
@@ -520,17 +639,17 @@
         {
           "id": "updates",
           "label": "lifetime updates",
-          "valueUsd": 15
+          "valueUsd": 10
         },
         {
           "id": "figma",
           "label": "Figma source files",
-          "valueUsd": 20
+          "valueUsd": 12
         },
         {
           "id": "extended",
           "label": "extended license",
-          "valueUsd": 30
+          "valueUsd": 20
         }
       ],
       "hiddenFees": [
@@ -554,10 +673,21 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 9,
-        "typical": 29,
-        "high": 79,
-        "confidence": "estimate"
+        "low": 19,
+        "typical": 39,
+        "high": 228,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Streamline pricing (Pro from $19/month, $228/year)",
+            "url": "https://help.streamlinehq.com/en/articles/5634634-what-s-the-pricing-for-streamline-4-0-plans"
+          },
+          {
+            "title": "Noun Project pricing (Pro removes attribution)",
+            "url": "https://costbench.com/software/design/noun-project/"
+          }
+        ]
       },
       "verifyQuery": "Icon set license 1 license price",
       "seller": {
@@ -568,8 +698,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          8.7,
-          15.66
+          11.7,
+          21.06
         ]
       },
       "sellerTypes": [
@@ -610,10 +740,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 15,
-        "typical": 49,
-        "high": 150,
-        "confidence": "estimate"
+        "low": 42,
+        "typical": 150,
+        "high": 500,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Pond5 per-clip prices ($25-200 per clip)",
+            "url": "https://subger.com/en/service/pond5"
+          },
+          {
+            "title": "How much stock footage costs",
+            "url": "https://www.footagesecrets.com/buyers-guide/how-much-does-stock-footage-cost/"
+          },
+          {
+            "title": "Storyblocks plans 2026 (from $42/month)",
+            "url": "https://pricingsaas.com/companies/videoblocks"
+          }
+        ]
       },
       "verifyQuery": "Stock video clips 5 clips price",
       "seller": {
@@ -624,8 +769,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          14.7,
-          26.46
+          45.0,
+          81.0
         ]
       },
       "sellerTypes": [
@@ -637,19 +782,19 @@
         {
           "id": "4k",
           "label": "4K versions",
-          "valueUsd": 15
+          "valueUsd": 30
         },
         {
           "id": "extra-clip",
           "label": "one extra clip",
-          "valueUsd": 10
+          "valueUsd": 30
         }
       ],
       "hiddenFees": [
         {
           "id": "per-project",
           "label": "license covers one project only",
-          "valueUsd": 20,
+          "valueUsd": 40,
           "payNow": false,
           "kind": "conditional"
         }
@@ -666,10 +811,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 20,
-        "typical": 50,
+        "low": 25,
+        "typical": 49,
         "high": 150,
-        "confidence": "estimate"
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Emigre web font license (single font, 100k pageviews, $49)",
+            "url": "https://emigre.com/License/Web"
+          },
+          {
+            "title": "Font pricing 2026 (web license $30-150 per weight)",
+            "url": "https://madegooddesigns.com/how-much-do-fonts-cost/"
+          },
+          {
+            "title": "MyFonts licensing options (pageview tiers)",
+            "url": "https://myfonts.com/pages/fontshop-font-formats-and-licensing-options"
+          }
+        ]
       },
       "verifyQuery": "Web font license 1 license price",
       "seller": {
@@ -680,8 +840,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          15.0,
-          27.0
+          14.7,
+          26.46
         ]
       },
       "sellerTypes": [
@@ -722,10 +882,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 10,
-        "typical": 30,
-        "high": 99,
-        "confidence": "estimate"
+        "low": 19,
+        "typical": 49,
+        "high": 199,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "PremiumBeat single-track licenses (Standard $49)",
+            "url": "https://www.PremiumBeat.com/license"
+          },
+          {
+            "title": "PremiumBeat review (Standard $49, Premium $199)",
+            "url": "https://photutorial.com/premiumbeat-review"
+          },
+          {
+            "title": "AudioJungle music licenses",
+            "url": "https://audiojungle.net/licenses/music"
+          }
+        ]
       },
       "verifyQuery": "Background music license 1 track price",
       "seller": {
@@ -736,8 +911,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          9.0,
-          16.2
+          14.7,
+          26.46
         ]
       },
       "sellerTypes": [
@@ -778,10 +953,21 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 15,
-        "typical": 39,
-        "high": 99,
-        "confidence": "estimate"
+        "low": 25,
+        "typical": 35,
+        "high": 65,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Getillustrations packs ($25, $35, $65 with commercial license)",
+            "url": "https://getillustrations.com/illustration-pack/colorwave-vector-talavera-pattern-illustrations"
+          },
+          {
+            "title": "Creative Market graphics and illustrations",
+            "url": "https://creativemarket.com/graphics-illustrations"
+          }
+        ]
       },
       "verifyQuery": "Illustration pack 1 license price",
       "seller": {
@@ -792,8 +978,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          11.7,
-          21.06
+          10.5,
+          18.9
         ]
       },
       "sellerTypes": [
@@ -826,10 +1012,25 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 10,
-        "typical": 25,
-        "high": 60,
-        "confidence": "estimate"
+        "low": 12,
+        "typical": 39,
+        "high": 199,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "50Folds pitch deck template ($39)",
+            "url": "https://50folds.gumroad.com/l/pitchdeck"
+          },
+          {
+            "title": "Modern Pitch Deck, Keynote and PowerPoint ($199)",
+            "url": "https://pitchworks.gumroad.com/l/modern"
+          },
+          {
+            "title": "VIP.graphics SaaS startup deck templates (from $12)",
+            "url": "https://vip.graphics/?p=7684"
+          }
+        ]
       },
       "verifyQuery": "Pitch deck template 1 license price",
       "seller": {
@@ -840,8 +1041,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          7.5,
-          13.5
+          11.7,
+          21.06
         ]
       },
       "sellerTypes": [
@@ -874,10 +1075,21 @@
       "paypalFlow": "capture_now",
       "price": {
         "currency": "USD",
-        "low": 9,
-        "typical": 24,
-        "high": 59,
-        "confidence": "estimate"
+        "low": 14,
+        "typical": 25,
+        "high": 51,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Creative Market iPhone, MacBook and poster mockups ($39)",
+            "url": "https://creativemarket.com/feelthis/281505709-iPhone-MacBook-Poster-Mockups"
+          },
+          {
+            "title": "All-in-one Apple device mockup bundle ($24.95, was $50.85)",
+            "url": "https://walidthrdedign.gumroad.com/l/mbwkbg"
+          }
+        ]
       },
       "verifyQuery": "Device mockup pack 1 license price",
       "seller": {
@@ -888,8 +1100,8 @@
         ],
         "minMargin": 0.2,
         "floorRange": [
-          7.2,
-          12.96
+          7.5,
+          13.5
         ]
       },
       "sellerTypes": [
@@ -922,10 +1134,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 42,
-        "typical": 59,
-        "high": 89,
-        "confidence": "estimate"
+        "low": 30,
+        "typical": 55,
+        "high": 130,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Blue Yeti vs Fifine K669B (K669B about $30-40)",
+            "url": "https://streamtechreviews.com/blog/blueyetivsfifine669b"
+          },
+          {
+            "title": "Best budget USB microphones 2026",
+            "url": "https://fone.tips/best-budget-usb-microphone/"
+          }
+        ]
       },
       "verifyQuery": "USB microphone 1 unit price",
       "seller": {
@@ -936,8 +1159,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          38.23,
-          45.88
+          35.64,
+          42.77
         ]
       },
       "sellerTypes": [
@@ -983,10 +1206,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 30,
-        "typical": 55,
-        "high": 99,
-        "confidence": "estimate"
+        "low": 50,
+        "typical": 59,
+        "high": 100,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Best Buy: Logitech C920s Pro 1080p webcam",
+            "url": "https://www.bestbuy.com/product/-/6321794"
+          },
+          {
+            "title": "Logitech C920s price history ($49.99-69.99)",
+            "url": "https://aislegopher.com/p/logitech-c920s-pro-hd-webcam-with-privacy-shutter-black/517120"
+          }
+        ]
       },
       "verifyQuery": "1080p webcam 1 unit price",
       "seller": {
@@ -997,8 +1231,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          35.64,
-          42.77
+          38.23,
+          45.88
         ]
       },
       "sellerTypes": [
@@ -1039,10 +1273,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 18,
-        "typical": 32,
-        "high": 60,
-        "confidence": "estimate"
+        "low": 33,
+        "typical": 40,
+        "high": 140,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Walmart Neewer ring lights (10-inch kits about $33-46)",
+            "url": "https://www.walmart.com/c/kp/neewer-ring-light"
+          },
+          {
+            "title": "Neewer RL-18 18-inch ring light kit ($139.99)",
+            "url": "https://neewer.com/products/led-ring-lights-66600024"
+          }
+        ]
       },
       "verifyQuery": "Ring light with stand 1 unit price",
       "seller": {
@@ -1053,8 +1298,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          20.74,
-          24.88
+          25.92,
+          31.1
         ]
       },
       "sellerTypes": [
@@ -1095,10 +1340,25 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 25,
-        "typical": 45,
-        "high": 90,
-        "confidence": "estimate"
+        "low": 28,
+        "typical": 50,
+        "high": 130,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Neewer 5x7 ft collapsible backdrop (from $69.99)",
+            "url": "https://neewer.com/products/lighting-studio-66600789"
+          },
+          {
+            "title": "Neewer background screens (collapsible backdrops from $27.99)",
+            "url": "https://neewer.com/collections/background-screen"
+          },
+          {
+            "title": "Neewer pull-up green screen ($129.99)",
+            "url": "https://neewer.com/products/neewer-148x180cm-green-screen-green-pull-up-style-10097406"
+          }
+        ]
       },
       "verifyQuery": "Collapsible green screen 1 unit price",
       "seller": {
@@ -1109,8 +1369,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          29.16,
-          34.99
+          32.4,
+          38.88
         ]
       },
       "sellerTypes": [
@@ -1151,10 +1411,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 15,
-        "typical": 25,
-        "high": 45,
-        "confidence": "estimate"
+        "low": 25,
+        "typical": 35,
+        "high": 129,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Best microphone boom arms 2026 (InnoGear about $35)",
+            "url": "https://www.musicianwave.com/best-microphone-boom-arms/"
+          },
+          {
+            "title": "Rode PSA1+ studio arm ($99-129)",
+            "url": "https://www.zzounds.com/productreview--RODPSA1PLUS"
+          }
+        ]
       },
       "verifyQuery": "Microphone boom arm 1 unit price",
       "seller": {
@@ -1165,8 +1436,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          16.2,
-          19.44
+          22.68,
+          27.22
         ]
       },
       "sellerTypes": [
@@ -1200,9 +1471,20 @@
       "price": {
         "currency": "USD",
         "low": 20,
-        "typical": 35,
-        "high": 70,
-        "confidence": "estimate"
+        "typical": 30,
+        "high": 75,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Anker USB-C Hub 7-in-1 ($25.99)",
+            "url": "https://www.anker.com/products/a83d2-usb-c-hub-7-in-1"
+          },
+          {
+            "title": "Anker 7-in-1 USB-C hub at $20",
+            "url": "https://pcworld.com/article/3148232/this-7-in-1-anker-usb-c-hub-is-now-20-a-simple-fix-for-port-starved-laptops.html"
+          }
+        ]
       },
       "verifyQuery": "USB-C hub 1 unit price",
       "seller": {
@@ -1213,8 +1495,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          22.68,
-          27.22
+          19.44,
+          23.33
         ]
       },
       "sellerTypes": [
@@ -1247,10 +1529,25 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 45,
-        "typical": 90,
-        "high": 200,
-        "confidence": "estimate"
+        "low": 68,
+        "typical": 100,
+        "high": 400,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Sony WH-CH720N vs Soundcore Space One, noise-cancelling under $100",
+            "url": "https://everydaytechessentials.blogspot.com/2026/03/sony-wh-ch720n-vs-soundcore-space-one.html"
+          },
+          {
+            "title": "Soundcore Space One at $68 on sale",
+            "url": "https://rss.boorghani.com/?p=371086"
+          },
+          {
+            "title": "Soundcore Space One ($99) vs Sony WH-1000XM5 ($399)",
+            "url": "https://chaindesk.ai/tools/youtube-summarizer/99-soundcore-space-one-vs-399-sony-wh-1000-xm-5-xk-SEC1riIA"
+          }
+        ]
       },
       "verifyQuery": "Noise-cancelling headphones 1 unit price",
       "seller": {
@@ -1261,8 +1558,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          58.32,
-          69.98
+          64.8,
+          77.76
         ]
       },
       "sellerTypes": [
@@ -1308,10 +1605,25 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 90,
-        "typical": 150,
-        "high": 280,
-        "confidence": "estimate"
+        "low": 89,
+        "typical": 130,
+        "high": 209,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "ASUS ZenScreen 15.6-inch drops to $169",
+            "url": "https://www.technobezz.com/best/asus-zenscreen-156-inch-1080p-portable-usb-monitor-drops-to-169"
+          },
+          {
+            "title": "Arzopa 15.6-inch portable monitor ($129.99, May 2026)",
+            "url": "https://findsera-com.pages.dev/products/arzopa-portable-monitor-15-6"
+          },
+          {
+            "title": "Best budget and expensive portable monitors 2026",
+            "url": "https://bgr.com/2119644/best-budget-expensive-portable-monitors-2026"
+          }
+        ]
       },
       "verifyQuery": "15.6-inch portable monitor 1 unit price",
       "seller": {
@@ -1322,8 +1634,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          97.2,
-          116.64
+          84.24,
+          101.09
         ]
       },
       "sellerTypes": [
@@ -1370,9 +1682,20 @@
       "price": {
         "currency": "USD",
         "low": 15,
-        "typical": 28,
-        "high": 55,
-        "confidence": "estimate"
+        "typical": 37,
+        "high": 60,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Rain Design mStand vs Nulaxy C1 ($48.88 vs $36.99, checked 2026)",
+            "url": "https://frontdeskreview.com/gear/laptop-stands/rain-design-mstand-vs-nulaxy-c1/"
+          },
+          {
+            "title": "Best laptop stands 2026 (Amazon Basics about $15)",
+            "url": "https://boredom-at-work.com/best-laptop-stands/"
+          }
+        ]
       },
       "verifyQuery": "Adjustable laptop stand 1 unit price",
       "seller": {
@@ -1383,8 +1706,8 @@
         ],
         "minMargin": 0.08,
         "floorRange": [
-          18.14,
-          21.77
+          23.98,
+          28.77
         ]
       },
       "sellerTypes": [
@@ -1412,10 +1735,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 80,
+        "low": 70,
         "typical": 150,
         "high": 300,
-        "confidence": "estimate"
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Fiverr: how much a video editor costs",
+            "url": "https://www.fiverr.com/resources/guides/video-animation/video-editor-cost"
+          },
+          {
+            "title": "Video editing rates 2026",
+            "url": "https://www.sidestackers.com/blog/video-editing-rates"
+          }
+        ]
       },
       "verifyQuery": "Video editor for a 3-minute demo 1 video price",
       "seller": {
@@ -1473,10 +1807,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 40,
-        "typical": 120,
-        "high": 400,
-        "confidence": "estimate"
+        "low": 35,
+        "typical": 100,
+        "high": 500,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Fiverr: cost to hire a brand designer",
+            "url": "https://www.fiverr.com/resources/guides/costs/brand-designer"
+          },
+          {
+            "title": "How much a logo design costs",
+            "url": "https://websiteplanet.com/blog/how-much-is-logo-design"
+          }
+        ]
       },
       "verifyQuery": "Logo design 1 logo price",
       "seller": {
@@ -1487,8 +1832,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          72.6,
-          99.0
+          60.5,
+          82.5
         ]
       },
       "sellerTypes": [
@@ -1534,10 +1879,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 50,
-        "typical": 120,
-        "high": 300,
-        "confidence": "estimate"
+        "low": 100,
+        "typical": 250,
+        "high": 800,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Cost of hiring a copywriter 2026 (marketplace landing page $100-800)",
+            "url": "https://stealthagents.com/research/cost-of-hiring-a-copywriter-2026"
+          },
+          {
+            "title": "Copywriter rates 2026",
+            "url": "https://www.sidestackers.com/blog/copywriter-rates"
+          }
+        ]
       },
       "verifyQuery": "Landing page copywriter 1 page price",
       "seller": {
@@ -1548,8 +1904,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          72.6,
-          99.0
+          151.25,
+          206.25
         ]
       },
       "sellerTypes": [
@@ -1561,12 +1917,12 @@
         {
           "id": "revision",
           "label": "one extra revision",
-          "valueUsd": 20
+          "valueUsd": 40
         },
         {
           "id": "devpost",
           "label": "Devpost write-up",
-          "valueUsd": 30
+          "valueUsd": 60
         }
       ],
       "hiddenFees": []
@@ -1582,10 +1938,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 30,
-        "typical": 75,
-        "high": 200,
-        "confidence": "estimate"
+        "low": 45,
+        "typical": 100,
+        "high": 300,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Wyzant public speaking coach ($50/hour)",
+            "url": "https://www.wyzant.com/Tutors/NC/Raleigh/9147055"
+          },
+          {
+            "title": "Thumbtack speech coaching ($170/hour)",
+            "url": "https://www.thumbtack.com/or/tualatin/public-speaking-training/silva-speech-coaching-50-off-deal/service/403571458818793485"
+          }
+        ]
       },
       "verifyQuery": "Pitch coaching session 1 hour price",
       "seller": {
@@ -1596,8 +1963,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          45.38,
-          61.88
+          60.5,
+          82.5
         ]
       },
       "sellerTypes": [
@@ -1609,7 +1976,7 @@
         {
           "id": "followup",
           "label": "follow-up review of the final video",
-          "valueUsd": 30
+          "valueUsd": 40
         },
         {
           "id": "script",
@@ -1630,10 +1997,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 30,
-        "typical": 80,
-        "high": 200,
-        "confidence": "estimate"
+        "low": 50,
+        "typical": 120,
+        "high": 450,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Voice-over pricing guide 2026 (per finished minute)",
+            "url": "https://voicebros.com/en/blog/voice-over-pricing-guide-2026"
+          },
+          {
+            "title": "Voice-over artist rate guide 2026",
+            "url": "https://www.sidestackers.com/rates/voice-over-artist"
+          }
+        ]
       },
       "verifyQuery": "Voice-over artist 3 minutes price",
       "seller": {
@@ -1644,8 +2022,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          48.4,
-          66.0
+          72.6,
+          99.0
         ]
       },
       "sellerTypes": [
@@ -1657,19 +2035,19 @@
         {
           "id": "retake",
           "label": "free retake",
-          "valueUsd": 15
+          "valueUsd": 20
         },
         {
           "id": "rush",
           "label": "24-hour delivery",
-          "valueUsd": 25
+          "valueUsd": 30
         }
       ],
       "hiddenFees": [
         {
           "id": "usage",
           "label": "commercial usage fee",
-          "valueUsd": 15,
+          "valueUsd": 25,
           "payNow": false,
           "kind": "later"
         }
@@ -1686,10 +2064,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 40,
-        "typical": 100,
-        "high": 250,
-        "confidence": "estimate"
+        "low": 200,
+        "typical": 350,
+        "high": 1040,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Fiverr website UI/UX audit ($200-400)",
+            "url": "https://fiverr.com/rmorrisdesign/do-a-ux-and-visual-design-audit-of-your-website"
+          },
+          {
+            "title": "Contra UX/UI audit (from $345, premium $1,040)",
+            "url": "https://contra.com/s/Uq6Q2o7E-ux-ui-audit"
+          }
+        ]
       },
       "verifyQuery": "UX review of the app 1 review price",
       "seller": {
@@ -1700,8 +2089,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          60.5,
-          82.5
+          211.75,
+          288.75
         ]
       },
       "sellerTypes": [
@@ -1713,12 +2102,12 @@
         {
           "id": "video",
           "label": "recorded walkthrough",
-          "valueUsd": 20
+          "valueUsd": 60
         },
         {
           "id": "followup",
           "label": "second review after fixes",
-          "valueUsd": 30
+          "valueUsd": 100
         }
       ],
       "hiddenFees": []
@@ -1734,10 +2123,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 40,
-        "typical": 90,
-        "high": 250,
-        "confidence": "estimate"
+        "low": 50,
+        "typical": 120,
+        "high": 400,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Fiverr clean logo reveal animation",
+            "url": "https://fiverr.com/sergiymoroz/animate-your-logo-icon"
+          },
+          {
+            "title": "Fiverr custom 2D logo animation",
+            "url": "https://fiverr.com/denys_mv/create-stunning-motion-graphics-and-animations"
+          }
+        ]
       },
       "verifyQuery": "Animated logo intro 10 seconds price",
       "seller": {
@@ -1748,8 +2148,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          54.45,
-          74.25
+          72.6,
+          99.0
         ]
       },
       "sellerTypes": [
@@ -1766,7 +2166,7 @@
         {
           "id": "variant",
           "label": "vertical version",
-          "valueUsd": 15
+          "valueUsd": 20
         }
       ],
       "hiddenFees": []
@@ -1782,10 +2182,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 40,
-        "typical": 90,
-        "high": 200,
-        "confidence": "estimate"
+        "low": 216,
+        "typical": 400,
+        "high": 1040,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Freelance QA tester rates 2026 (junior $50-80/hour)",
+            "url": "https://softwaretestpilot.com/blog/career-interview-prep/freelance-qa-tester-rates-how-much-to-charge"
+          },
+          {
+            "title": "QA tester salary in the US (about $27/hour)",
+            "url": "https://www.salary.com/research/salary/recruiting/qa-tester-salary"
+          }
+        ]
       },
       "verifyQuery": "QA tester 1 day price",
       "seller": {
@@ -1796,8 +2207,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          54.45,
-          74.25
+          242.0,
+          330.0
         ]
       },
       "sellerTypes": [
@@ -1809,12 +2220,12 @@
         {
           "id": "devices",
           "label": "testing on more devices",
-          "valueUsd": 20
+          "valueUsd": 60
         },
         {
           "id": "report",
           "label": "written bug report",
-          "valueUsd": 10
+          "valueUsd": 40
         }
       ],
       "hiddenFees": []
@@ -1831,9 +2242,20 @@
       "price": {
         "currency": "USD",
         "low": 40,
-        "typical": 60,
-        "high": 90,
-        "confidence": "estimate"
+        "typical": 58,
+        "high": 80,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Domino's menu with prices (large $13.99, specialty $18.99)",
+            "url": "https://menupedia.us/dominos-menu/"
+          },
+          {
+            "title": "Domino's large any-topping pizza deal at $9.99",
+            "url": "https://slickdeals.net/f/18111496-domino-s-pizza-large-any-crust-any-toppings-pizza-for-9-99-carryout-and-delivery"
+          }
+        ]
       },
       "verifyQuery": "Pizza for the team 4 large pizzas price",
       "seller": {
@@ -1844,8 +2266,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          33.0,
-          42.9
+          31.9,
+          41.47
         ]
       },
       "sellerTypes": [
@@ -1891,10 +2313,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 18,
-        "typical": 28,
-        "high": 40,
-        "confidence": "estimate"
+        "low": 20,
+        "typical": 24,
+        "high": 28,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Walmart: Red Bull 8.4 oz, 12 pack",
+            "url": "https://www.walmart.com/ip/199527547"
+          },
+          {
+            "title": "Farm and Fleet: Red Bull 8.4 oz 12-pack ($24.99)",
+            "url": "https://www.farmandfleet.com/products/1243801-red-bull-84-oz-energy-drink-12-pack.html"
+          }
+        ]
       },
       "verifyQuery": "Energy drinks 12-pack price",
       "seller": {
@@ -1905,8 +2338,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          15.4,
-          20.02
+          13.2,
+          17.16
         ]
       },
       "sellerTypes": [
@@ -1939,10 +2372,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 80,
+        "low": 83,
         "typical": 140,
         "high": 220,
-        "confidence": "estimate"
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Printful custom hoodies (from $20.75)",
+            "url": "https://www.printful.com/custom-hoodies"
+          },
+          {
+            "title": "Custom Ink bulk custom hoodies guide",
+            "url": "https://www.customink.com/blog/bulk-custom-hoodies-guide/"
+          }
+        ]
       },
       "verifyQuery": "Team hoodies 4 hoodies price",
       "seller": {
@@ -2000,10 +2444,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 20,
+        "low": 25,
         "typical": 45,
-        "high": 90,
-        "confidence": "estimate"
+        "high": 75,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "100 custom 3-inch die-cut stickers for $25 (sale)",
+            "url": "https://customstickers.com/products/100x-3in-for-25"
+          },
+          {
+            "title": "Sticker Mule review 2026 (100 die-cut 3x3 for $73)",
+            "url": "https://bootstrappingecommerce.com/?p=14284"
+          }
+        ]
       },
       "verifyQuery": "Die-cut stickers 100 stickers price",
       "seller": {
@@ -2056,10 +2511,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 18,
-        "typical": 30,
-        "high": 50,
-        "confidence": "estimate"
+        "low": 30,
+        "typical": 45,
+        "high": 75,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Mandheling coffee price 2026 (retail about $52/kg)",
+            "url": "https://fnb.coffee/blog/mandheling-coffee-price-2026"
+          },
+          {
+            "title": "Gayo wine coffee price 2026 ($32-54/kg)",
+            "url": "https://fnb.tech/gayo-wine-coffee-price"
+          }
+        ]
       },
       "verifyQuery": "Specialty coffee beans 1 kg price",
       "seller": {
@@ -2070,8 +2536,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          16.5,
-          21.45
+          24.75,
+          32.18
         ]
       },
       "sellerTypes": [
@@ -2104,10 +2570,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 20,
-        "typical": 40,
-        "high": 80,
-        "confidence": "estimate"
+        "low": 34,
+        "typical": 64,
+        "high": 150,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "WeWork coworking in the United States (day pass from about $39)",
+            "url": "https://www.wework.com/vi-VN/l/coworking-space/united-states"
+          },
+          {
+            "title": "Coworking costs in the 25 largest US metros (day pass average about $32)",
+            "url": "https://buildremote.co/?p=8172"
+          }
+        ]
       },
       "verifyQuery": "Coworking day pass 2 people price",
       "seller": {
@@ -2118,8 +2595,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          22.0,
-          28.6
+          35.2,
+          45.76
         ]
       },
       "sellerTypes": [
@@ -2131,7 +2608,7 @@
         {
           "id": "meeting-room",
           "label": "one hour of meeting room",
-          "valueUsd": 15
+          "valueUsd": 20
         },
         {
           "id": "coffee",
@@ -2152,10 +2629,21 @@
       "paypalFlow": "authorize_then_capture_on_delivery",
       "price": {
         "currency": "USD",
-        "low": 20,
-        "typical": 40,
-        "high": 75,
-        "confidence": "estimate"
+        "low": 16,
+        "typical": 30,
+        "high": 60,
+        "confidence": "researched",
+        "asOf": "2026-10",
+        "sources": [
+          {
+            "title": "Costco cakes prices 2026 (half sheet $27.99)",
+            "url": "https://costcoguides.com/costco-cakes-prices/"
+          },
+          {
+            "title": "Costco vs Walmart: cheapest bakery cake 2026",
+            "url": "https://www.thedailymeal.com/2281697/costco-vs-walmart-cheapest-cake-2026/"
+          }
+        ]
       },
       "verifyQuery": "Celebration cake 1 cake price",
       "seller": {
@@ -2166,8 +2654,8 @@
         ],
         "minMargin": 0.1,
         "floorRange": [
-          22.0,
-          28.6
+          16.5,
+          21.45
         ]
       },
       "sellerTypes": [

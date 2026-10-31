@@ -20,4 +20,20 @@ Hidden fees with `payNow: true` (shipping, setup) are charged at checkout. The o
 
 ## Price confidence
 
-All prices are USD estimates (`confidence: "estimate"`). `verifyQuery` holds a search phrase for checking each price; nothing reads it automatically yet.
+Every item's `price` range (`low`, `typical`, `high`, in USD for the item's `unit`) was checked against public web pages in October 2026:
+
+- `confidence: "researched"` means the range comes from the pages in `price.sources` (`[{title, url}]`, one to three per item), checked in the month given by `price.asOf`. Each title notes the figure taken from that page.
+- `confidence: "estimate"` means no source was found. No item is an estimate right now, but the generator falls back to it for any item without sources.
+
+Sources are retail and marketplace listings (Best Buy, Walmart, Neewer, Anker, ThemeForest, Fiverr, Creative Market), vendor pricing pages (Namecheap, Hostinger, Supabase, Neon, Postmark, Resend, UptimeRobot, Zoho, OpenAI, Anthropic) and, for services without list prices (freelance rates, coworking), 2026 rate guides. Prices change; treat the ranges as a snapshot.
+
+How the range is read:
+
+- `low` is the cheapest real listing or plan that fits the unit (often a sale or promo price).
+- `typical` is what a buyer usually pays for a solid mainstream choice.
+- `high` is the premium end (a pro brand, a top-tier plan or seller).
+- Monthly plans are multiplied out to the unit (for example "3 months" or "1 year"); per-unit rates to the bundle (for example 4 pizzas or 8 hours of QA).
+
+Two engine rules shape the ranges: the agent walks away at the midpoint of `low` and `typical`, and seller floors come from `typical` times the cost profile. So `low` cannot sit too far below `typical` for low-margin goods, or most deals fail. Measure deal rates after changing a price (every item should still close on most seeds).
+
+Sources live in `SOURCES` in `scripts/gen_catalog.py`; edit them there and regenerate with `python3 scripts/gen_catalog.py data/catalog.json`. `verifyQuery` still holds a search phrase for re-checking each price.

@@ -24,7 +24,17 @@ export interface CatalogItem {
   description: string;
   delivery: Delivery;
   paypalFlow: "capture_now" | "authorize_then_capture_on_delivery";
-  price: { currency: "USD"; low: number; typical: number; high: number; confidence: string };
+  price: {
+    currency: "USD";
+    low: number;
+    typical: number;
+    high: number;
+    /** "researched" when the range comes from the listed pages, "estimate" otherwise. */
+    confidence: "researched" | "estimate";
+    /** Month the sources were checked, e.g. "2026-10". */
+    asOf?: string;
+    sources?: { title: string; url: string }[];
+  };
   verifyQuery: string;
   seller: { costProfile: string; costShare: [number, number]; minMargin: number; floorRange: [number, number] };
   sellerTypes: string[];

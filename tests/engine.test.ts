@@ -96,7 +96,8 @@ test("missions never spend more than the budget", () => {
 
 test("sellers remember a lowball offer", () => {
   let memory = {};
-  for (const seed of SEEDS.slice(0, 10)) memory = runDeal("portable-monitor", { seed, memory }).memory;
+  // Needs an item whose opening anchor sits far below seller floors (a wide web low-to-typical spread).
+  for (const seed of SEEDS.slice(0, 10)) memory = runDeal("logo-designer", { seed, memory }).memory;
   const insults = Object.values(memory as Record<string, { lowballs: number }>).reduce((n, m) => n + m.lowballs, 0);
   assert.ok(insults > 0);
 });
