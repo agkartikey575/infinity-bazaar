@@ -52,6 +52,9 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .field select { min-width: 240px; }
 .field.speed select { min-width: 0; }
 .field.table-no { width: 110px; }
+.paypal-mode { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.switch { display: inline-flex; gap: 8px; align-items: center; font: 600 14px var(--body); }
+.switch input { width: 18px; height: 18px; accent-color: var(--brass); }
 .btns { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .room { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 24px 70px -36px rgba(20, 20, 60, 0.45); }
@@ -128,7 +131,7 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .row b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .pill { font: 700 11px var(--mono); padding: 3px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted); white-space: nowrap; }
 .pill.captured, .pill.authorized { background: var(--teal-soft); color: var(--teal); }
-.pill.awaiting-approval, .pill.checking, .pill.negotiating { background: var(--brass-soft); color: var(--brass); }
+.pill.awaiting-approval, .pill.paying, .pill.checking, .pill.negotiating { background: var(--brass-soft); color: var(--brass); }
 .pill.blocked, .pill.declined, .pill.voided, .pill.refunded { background: var(--rose-soft); color: var(--rose); }
 
 .receipt { border-top: 1px solid var(--line); padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 10px; }

@@ -13,6 +13,7 @@ import {
   type LineStatus,
   type Run,
 } from "../lib/timeline.ts";
+import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 
 const SPEEDS = [0.5, 1, 2, 4];
 const FACE_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
@@ -22,6 +23,7 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   negotiating: "Negotiating",
   checking: "AgentGuard check",
   "awaiting-approval": "Needs your OK",
+  paying: "Waiting for PayPal",
   authorized: "Held until delivery",
   captured: "Paid",
   declined: "Declined",
@@ -136,6 +138,10 @@ export default function DealRoom() {
   const sheetRef = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const [seedDraft, setSeedDraft] = useState("42");
+  /** A fresh id for every Play, so real PayPal ids never repeat across visitors or replays. */
+  const [nonce, setNonce] = useState("startrun00");
+  // Random per visitor from the first Play; generated in the browser so server and client render the same.
+  useEffect(() => setNonce(newNonce()), []);
 
   const run = useMemo(() => {
     if (rogue) return buildSingleRun("usb-mic", seed, true);
@@ -144,16 +150,127 @@ export default function DealRoom() {
   }, [selection, seed, rogue]);
 
   const { steps, waitingFor } = useMemo(() => buildSteps(run, decisions), [run, decisions]);
-  const view = useMemo(() => deriveView(run, steps, cursor), [run, steps, cursor]);
+  const baseView = useMemo(() => deriveView(run, steps, cursor), [run, steps, cursor]);
   const finished = cursor >= steps.length && waitingFor === null;
   const awaiting = cursor >= steps.length && waitingFor !== null;
 
+  // Real PayPal sandbox: the server pays; playback waits at each money step until it has.
+  const runRef = useMemo(
+    () => ({ kind: run.kind, id: rogue ? "usb-mic" : selection.split(":")[1], seed, nonce }),
+    [run.kind, rogue, selection, seed, nonce],
+  );
+  const live = useLivePayPal(runRef);
+  const pendingWin = useRef<Window | null>(null);
+
+  /** A step that must wait for a real PayPal call: paying the line, or settling its hold. */
+  const gateAt = (i: number): { line: number; action: "pay" | "deliver"; ready: boolean } | null => {
+    if (!live.enabled || i >= steps.length) return null;
+    const next = steps[i];
+    if (next.type !== "paypal") return null;
+    const state: LiveState = live.lines[next.line]?.state ?? "idle";
+    const first = steps.findIndex((s) => s.type === "paypal" && s.line === next.line);
+    if (i === first) return { line: next.line, action: "pay", ready: ["captured", "authorized", "voided", "blocked", "declined"].includes(state) };
+    const held = getItem(run.lines[next.line].itemId).paypalFlow !== "capture_now";
+    if (held && (next.effect === "captured" || next.effect === "voided")) {
+      return { line: next.line, action: "deliver", ready: ["captured", "voided", "declined", "blocked"].includes(state) };
+    }
+    return null;
+  };
+  const gate = gateAt(cursor);
+
   useEffect(() => {
-    if (!playing || cursor >= steps.length) return;
+    if (!playing || !gate || gate.ready) return;
+    const state = live.lines[gate.line]?.state ?? "idle";
+    if (gate.action === "deliver") {
+      if (state === "authorized") live.deliver(gate.line);
+      return;
+    }
+    if (state !== "idle") return; // working, waiting for you, or failed
+    if (gate.action === "pay") {
+      const win = pendingWin.current;
+      pendingWin.current = null;
+      live.pay(gate.line, decisions[gate.line] === "approved", win);
+    } else {
+      live.deliver(gate.line);
+    }
+  }, [playing, gate?.line, gate?.action, gate?.ready, live.lines]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Latency: start the PayPal call as soon as AgentGuard has approved, while the
+  // check is still on screen, so the order is usually ready when playback gets there.
+  // Same calls, same order of events; only earlier.
+  useEffect(() => {
+    if (!live.enabled || !playing || cursor === 0) return;
+    const shown = steps[cursor - 1];
+    if (!shown) return;
+    const idle = (l: number) => (live.lines[l]?.state ?? "idle") === "idle";
+    // Approved: pay now. Blocked: let the server's AgentGuard refuse too, so its verdict is on screen.
+    if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line)) live.pay(shown.line, false);
+    if (shown.type === "event" && live.lines[shown.line]?.state === "authorized") live.deliver(shown.line);
+  }, [cursor, playing, live.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When PayPal needs a click, bring the button into view (it can be far down on a phone).
+  const needsClick = live.lines[baseView.line]?.state === "needs-click";
+  useEffect(() => {
+    if (!needsClick) return;
+    const b = document.getElementById("pay-with-paypal");
+    b?.scrollIntoView({ block: "center", behavior: "smooth" });
+    b?.focus({ preventScroll: true });
+  }, [needsClick]);
+
+  // If you cancel in the PayPal window, the deal room records a decline.
+  useEffect(() => {
+    for (const [k, l] of Object.entries(live.lines)) {
+      const i = Number(k);
+      if (!run.lines[i]) continue;
+      if (l.state === "declined" && decisions[i] === "approved") setDecisions((prev) => ({ ...prev, [i]: "declined" }));
+    }
+  }, [live.lines, decisions]);
+
+  useEffect(() => {
+    if (!playing || cursor >= steps.length || (gate && !gate.ready)) return;
     const last = steps[cursor - 1];
     const t = setTimeout(() => setCursor((c) => c + 1), last ? stepDelay(last) / speed : 300);
     return () => clearTimeout(t);
-  }, [playing, cursor, steps, speed]);
+  }, [playing, cursor, steps, speed, gate?.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** In real mode, show what PayPal actually did instead of the simulated steps. */
+  const view = useMemo(() => {
+    if (!live.enabled) return baseView;
+    const statuses = [...baseView.statuses];
+    const amounts = [...baseView.amounts];
+    const map: Partial<Record<LiveState, LineStatus>> = {
+      captured: "captured",
+      authorized: "authorized",
+      voided: "voided",
+      declined: "declined",
+      blocked: "blocked",
+      "waiting-paypal": "paying",
+      "needs-click": "paying",
+      "needs-decision": "awaiting-approval",
+    };
+    for (const [k, l] of Object.entries(live.lines)) {
+      const i = Number(k);
+      const st = map[l.state];
+      if (!run.lines[i]) continue;
+      if (!st) continue;
+      statuses[i] = st;
+      amounts[i] = st === "captured" || st === "authorized" || st === "awaiting-approval" || st === "paying" ? run.lines[i].deal.outcome.amountToPay ?? null : null;
+    }
+    let committedUsd = 0;
+    let capturedUsd = 0;
+    let pendingUsd = 0;
+    statuses.forEach((st, i) => {
+      if (st === "captured" || st === "authorized") committedUsd += amounts[i] ?? 0;
+      if (st === "captured") capturedUsd += amounts[i] ?? 0;
+      if (st === "awaiting-approval" || st === "paying") pendingUsd += amounts[i] ?? 0;
+    });
+    const rows = live.lines[baseView.line]?.rows ?? [];
+    const checkout = [
+      ...baseView.checkout.filter((r) => r.source !== "paypal"),
+      ...rows.map((r) => ({ text: r.debugId ? `${r.text} · debug ${r.debugId}` : r.text, tone: "ok" as const })),
+    ];
+    return { ...baseView, statuses, amounts, committedUsd, capturedUsd, pendingUsd, checkout };
+  }, [baseView, live.enabled, live.lines, run]);
 
   useEffect(() => {
     if (awaiting) {
@@ -199,6 +316,7 @@ export default function DealRoom() {
       setSeedDraft(String(next.seed));
     }
     setRogue(next.rogue ?? false);
+    setNonce(newNonce());
     setDecisions({});
     setCursor(0);
     setPlaying(true);
@@ -206,7 +324,20 @@ export default function DealRoom() {
 
   const decide = (d: Decision) => {
     if (waitingFor === null) return;
+    if (live.enabled) {
+      // Open the PayPal window inside the click, so the browser doesn't block it.
+      if (d === "approved") pendingWin.current = window.open("", "paypal", "width=480,height=720");
+      else live.decline(waitingFor);
+    }
     setDecisions((prev) => ({ ...prev, [waitingFor]: d }));
+    setPlaying(true);
+  };
+
+  /** Skip stops at the next real PayPal step that still has to happen. */
+  const skip = () => {
+    let i = cursor;
+    while (i < steps.length && !(gateAt(i) && !gateAt(i)!.ready)) i++;
+    setCursor(i);
     setPlaying(true);
   };
 
@@ -276,12 +407,12 @@ export default function DealRoom() {
               onClick={() => (finished ? restart({ seed, rogue }) : setPlaying((p) => !p))}
               aria-label={finished ? "Replay" : playing ? "Pause" : "Play"}
             >
-              {finished ? "↺ Replay" : playing ? "❚❚ Pause" : "▶ Play"}
+              {finished ? "↺ Replay" : gate && !gate.ready && playing ? "Waiting for PayPal…" : playing ? "❚❚ Pause" : "▶ Play"}
             </button>
             <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Shuffle sellers, floors and events">
               🎲 New table
             </button>
-            <button onClick={() => setCursor(steps.length)} disabled={cursor >= steps.length} aria-label="Skip to the next decision or the end">
+            <button onClick={skip} disabled={cursor >= steps.length || Boolean(gate && !gate.ready)} aria-label="Skip to the next decision or the end">
               ⏭ Skip
             </button>
             <button className="danger" onClick={() => restart({ seed, rogue: true })}>
@@ -298,6 +429,30 @@ export default function DealRoom() {
               ))}
             </select>
           </label>
+          {live.status.mode === "sandbox" && (
+            <div className="paypal-mode">
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={live.enabled}
+                  onChange={(e) => {
+                    live.setEnabled(e.target.checked);
+                    restart({ seed, rogue });
+                  }}
+                />
+                Real PayPal sandbox
+              </label>
+              {live.walletError && <span className="note">{live.walletError}</span>}
+              {live.enabled &&
+                (live.status.wallet ? (
+                  <span className="pill captured">Wallet connected</span>
+                ) : (
+                  <button onClick={live.connectWallet} title="Approve once in PayPal so the agent can pay approved items by itself">
+                    Connect PayPal wallet
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       </header>
 
@@ -404,7 +559,33 @@ export default function DealRoom() {
                 </div>
               ))}
             </div>
-            <span className="note">PayPal calls are simulated in this version; sandbox payments come next.</span>
+            {live.enabled && live.lines[view.line]?.state === "needs-click" && (
+              <button id="pay-with-paypal" className="primary" onClick={() => live.payWithPayPal(view.line)}>
+                Pay with PayPal
+              </button>
+            )}
+            {live.enabled && live.lines[view.line]?.state === "needs-decision" && (
+              <div className="row-ask">
+                AgentGuard on the server wants your OK for this payment.{" "}
+                <button className="primary" onClick={() => live.pay(view.line, true, window.open("", "paypal", "width=480,height=720"))}>
+                  Approve
+                </button>{" "}
+                <button onClick={() => live.decline(view.line)}>Decline</button>
+              </div>
+            )}
+            {live.enabled && live.lines[view.line]?.state === "error" && (
+              <div className="row-bad">
+                PayPal error: {live.lines[view.line]?.error}{" "}
+                <button onClick={() => live.retry(view.line)}>Retry</button>
+              </div>
+            )}
+            <span className="note">
+              {live.enabled
+                ? live.status.wallet
+                  ? "Real PayPal sandbox. Approved payments use your connected wallet; ids are PayPal's own."
+                  : "Real PayPal sandbox. Connect a wallet to let the agent pay by itself, or approve each payment in PayPal."
+                : "PayPal calls are simulated here."}
+            </span>
           </div>
         </div>
 

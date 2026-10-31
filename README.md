@@ -62,10 +62,26 @@ flowchart LR
 | --- | --- |
 | Catalog, negotiation engine, AgentGuard | Done, tested |
 | Deal room web app | Working; arena redesign in progress |
-| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void) | Next. The deal room currently shows **simulated** PayPal calls |
+| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void; Vault v3 wallet) | Working: real sandbox orders when keys are set, simulated otherwise |
 | AI voices for sellers | Planned. The engine decides every price; the AI only rewrites the wording |
 
 Catalog prices are hand-researched estimates (`confidence: "estimate"`), not live data.
+
+## How payments work
+
+The browser never sends a price. It names the run (mission, table number and a random id for each Play) and the line; the server replays the deterministic engine, computes the amount itself, runs AgentGuard, and only then calls PayPal.
+
+| AgentGuard says | What happens at PayPal |
+| --- | --- |
+| Approve | Paid from your connected PayPal wallet (Vault), with no one present. Without a wallet, you approve it in a PayPal window. |
+| Ask you | You approve in the deal room, then in the PayPal window. |
+| Block | No call to PayPal at all. |
+
+Digital items use intent CAPTURE. Shipped goods and services use intent AUTHORIZE: the money is held, captured when delivery is confirmed, or the hold is voided if delivery fails. PayPal's own capture and authorization statuses are checked; anything but success counts as declined.
+
+Every PayPal call carries a `PayPal-Request-Id` derived from the run's random id and the line, so a retry or double click returns the same order instead of paying twice, and two visitors never share ids.
+
+The payment ledger travels with the browser, signed by the server. It is tamper-evident: amounts, states and the run can't be changed. An older copy of the same run's ledger could be replayed, so the budget is enforced per run; per-line request ids still prevent paying any line twice. A production version would keep the ledger in a database.
 
 ## License
 
