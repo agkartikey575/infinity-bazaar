@@ -96,7 +96,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.deepEqual(await pills(page), exp.pills.map(() => "Waiting"));
     await page.selectOption("#speed", "4");
     await btn(page, "Play").click();
-    await page.waitForSelector(".booth .msg", { timeout: 5000 });
+    await page.waitForSelector(".booth .say p:not(.quiet)", { timeout: 5000 });
     await page.waitForTimeout(3000);
     await playToEnd(page, "approved");
     await page.waitForTimeout(800);
@@ -108,8 +108,12 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await page.locator(".checkout").innerText(), /POST \/v2\//);
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
     assert.equal(await page.locator(".receipt tbody tr").count(), exp.pills.length, "receipt lists every item");
-    const gaps = await page.$$eval(".booth .log", (els) => els.map((e) => e.scrollHeight - e.scrollTop - e.clientHeight));
-    assert.ok(gaps.every((g) => g <= 2), `booth logs scrolled to the newest message: ${gaps}`);
+    assert.equal(await page.locator(".booth").count(), 3, "three sellers in the arena");
+    await page.locator(".transcript summary").click();
+    await page.waitForTimeout(300);
+    assert.ok((await page.locator(".transcript .msg").count()) > 3, "transcript keeps the whole conversation");
+    const gap = await page.$eval(".transcript .log", (e) => e.scrollHeight - e.scrollTop - e.clientHeight);
+    assert.ok(gap <= 2, `transcript scrolled to the newest message: ${gap}`);
   });
 
   await check(`${w}px: approval sheet, approve (table ${askSeed})`, viewport, async (page) => {
@@ -163,9 +167,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.equal((await amounts(page))[0], "—");
     assert.equal(await page.locator(".stamp").count(), 1, "blocked stamp");
     assert.match(await page.locator(".caster").innerText(), /[Bb]locked/);
-    const checkout = await page.locator(".checkout").innerText();
-    assert.match(checkout, /Blocked because/);
-    assert.doesNotMatch(checkout, /POST |PayPal order|Paid \$/);
+    // AgentGuard's verdict shows in the gate; the Payment panel shows that nothing reached PayPal.
+    assert.match(await page.locator(".gate").innerText(), /Blocked because/);
+    assert.match(await page.locator(".gate .lamp.on").innerText(), /Block/, "gate shows the block state");
+    assert.doesNotMatch(await page.locator(".checkout").innerText(), /POST |PayPal order|Paid \$/);
     assert.match(await bnums(page), /Paid \$0/);
     await btn(page, /New table/).click();
     await skip(page);
