@@ -20,4 +20,4 @@ Hidden fees with `payNow: true` (shipping, setup) are charged at checkout. The o
 
 ## Price confidence
 
-All prices are USD estimates (`confidence: "estimate"`). The app refreshes them with live web search using each item's `verifyQuery` and shows the sources on the price card.
+All prices are USD estimates (`confidence: "estimate"`). `verifyQuery` holds a search phrase for checking each price; nothing reads it automatically yet.

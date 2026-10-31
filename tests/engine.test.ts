@@ -42,8 +42,10 @@ test("every item, many seeds: deals stay within the walk-away price and above se
       const o = d.outcome;
       const seller = d.sellers.find((s) => s.id === o.sellerId)!;
       assert.ok(o.price! >= seller.floor, `${item.id}#${seed} paid below the seller floor`);
-      assert.ok(o.amountToPay! <= d.plan.walkAway, `${item.id}#${seed} paid $${o.amountToPay} over walk-away $${d.plan.walkAway}`);
-      assert.ok(o.amountToPay! + o.futureFee <= d.plan.walkAway, `${item.id}#${seed} true cost over walk-away`);
+      assert.ok(o.amountToPay! <= d.plan.cap, `${item.id}#${seed} paid $${o.amountToPay} over the cap $${d.plan.cap}`);
+      if (o.amountToPay! > d.plan.walkAway) assert.ok(d.beats.some((b) => b.kind === "agent" && b.move === "explain"), `${item.id}#${seed} stretched without saying why`);
+      // Later fees (renewals) count when ranking sellers, not against today's walk-away price.
+      assert.ok(o.effectiveCost === o.amountToPay! + o.futureFee, `${item.id}#${seed} effective cost`);
     }
   }
   // The agent should close most deals, but not all: walking away is part of the game.
@@ -55,19 +57,31 @@ test("rogue mode: the agent falls for an upsell and AgentGuard blocks it", () =>
   for (const seed of SEEDS) {
     const d = runDeal("usb-mic", { seed, rogue: true, itemCapUsd: 70 });
     assert.equal(d.outcome.rogue, true, `seed ${seed}`);
-    const g = checkPayment({ amount: d.outcome.amountToPay!, spentSoFar: 0, sellerName: d.outcome.sellerName!, rules: { budgetUsd: 300, askAboveUsd: 100, itemCapUsd: 70 } });
+    const g = checkPayment({ amount: d.outcome.amountToPay!, spentSoFar: 0, sellerId: d.outcome.sellerId!, sellerName: d.outcome.sellerName!, rules: { budgetUsd: 300, askAboveUsd: 100, itemCapUsd: 70 } });
     assert.equal(g.decision, "block", `seed ${seed}`);
   }
 });
 
 test("AgentGuard decisions", () => {
   const rules = { budgetUsd: 300, askAboveUsd: 100, itemCapUsd: 130 };
-  assert.equal(checkPayment({ amount: 47, spentSoFar: 0, sellerName: "A", rules }).decision, "approve");
-  assert.equal(checkPayment({ amount: 115, spentSoFar: 47, sellerName: "A", rules }).decision, "ask_user");
-  assert.equal(checkPayment({ amount: 150, spentSoFar: 0, sellerName: "A", rules }).decision, "block");
-  assert.equal(checkPayment({ amount: 120, spentSoFar: 200, sellerName: "A", rules }).decision, "block");
-  assert.equal(checkPayment({ amount: 20, spentSoFar: 0, sellerName: "Bad", rules: { ...rules, blockedSellers: ["Bad"] } }).decision, "block");
-  assert.equal(checkPayment({ amount: -5, spentSoFar: 0, sellerName: "A", rules }).decision, "block");
+  const pay = (amount: number, spentSoFar = 0, extra: object = {}) =>
+    checkPayment({ amount, spentSoFar, sellerId: "s1", sellerName: "A", rules, ...extra }).decision;
+  assert.equal(pay(47), "approve");
+  assert.equal(pay(115, 47), "ask_user");
+  assert.equal(pay(150), "block");
+  assert.equal(pay(120, 200), "block");
+  assert.equal(pay(-5), "block");
+  assert.equal(pay(10.005), "block");
+  assert.equal(pay(20, 0, { currency: "EUR" }), "block");
+  assert.equal(pay(20, 0, { alreadyPaid: true }), "block");
+  assert.equal(pay(20, 0, { rules: { ...rules, blockedSellerIds: ["s1"] } }), "block");
+  assert.equal(pay(20, 0, { group: "fun", rules: { ...rules, allowedGroups: ["gear"] } }), "block");
+  assert.equal(pay(50, 200, { rules: { ...rules, reserveUsd: 60 } }), "ask_user");
+  assert.equal(pay(19.99), "approve", "valid cents");
+  assert.equal(pay(0.29), "approve");
+  assert.equal(pay(20, 0, { surpriseFee: true }), "ask_user");
+  assert.equal(pay(20, 0, { laterFee: 25 }), "ask_user");
+  assert.equal(pay(20, 0, { agreedAmount: 19 }), "block", "amount must match the agreed price");
 });
 
 test("missions never spend more than the budget", () => {
@@ -75,7 +89,7 @@ test("missions never spend more than the budget", () => {
     for (const seed of SEEDS.slice(0, 20)) {
       const r = runMission(m.id, { seed, includeNice: true });
       assert.ok(r.spentUsd + r.pendingUsd <= r.budgetUsd, `${m.id}#${seed}`);
-      for (const line of r.lines) if (line.status === "paid") assert.equal(line.guard?.decision, "approve");
+      for (const line of r.lines) if (line.status === "paid" || line.status === "voided") assert.equal(line.guard?.decision, "approve");
     }
   }
 });

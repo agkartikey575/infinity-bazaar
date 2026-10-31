@@ -1,7 +1,7 @@
 """Generates data/catalog.json for Infinity Bazaar from compact item rows.
 
 Prices are USD estimates for late 2026, marked confidence="estimate".
-The app should refresh them with live web search (see verifyQuery).
+verifyQuery is a search phrase for checking each price by hand or later by the app.
 """
 import json, sys, pathlib
 
@@ -19,6 +19,12 @@ COST = {
 }
 
 PAY_NOW = {"shipping", "setup", "delivery"}
+# Certain later costs. Every other hidden fee is a condition (only if you return it,
+# exceed a limit, etc.): shown as a term, not counted as money.
+LATER = {"renewal", "commercial", "usage", "source-fee"}
+
+def fee_kind(fid):
+    return "now" if fid in PAY_NOW else "later" if fid in LATER else "conditional"
 
 GROUPS = {
     "online": "Online services",
@@ -35,17 +41,17 @@ ROWS = [
   ("domain-dev", ".dev domain name", "online", "1 year", "instant", 10, 14, 20, "online",
    ["reseller", "big-brand", "desperate-startup"],
    [("privacy", "Free WHOIS privacy", 5), ("renewal-lock", "Renewal price locked", 6)],
-   [("renewal", "Renewal price far above first-year price", 25)],
+   [("renewal", "Renewal price far above first-year price", 6)],
    "A memorable domain for the project's demo link."),
   ("hosting-starter", "Starter web hosting", "online", "1 year", "instant", 24, 60, 120, "online",
    ["big-brand", "desperate-startup", "reseller"],
    [("ssl", "Free SSL certificate", 10), ("backups", "Daily backups", 12), ("extra-month", "2 extra months", 10)],
-   [("renewal", "Renewal at full list price", 40), ("setup", "One-time setup fee", 15)],
+   [("renewal", "Renewal at full list price", 15), ("setup", "One-time setup fee", 15)],
    "Hosting for the landing page and API."),
   ("domain-hosting", "Domain and hosting bundle", "online", "1 year", "instant", 24, 38, 70, "online",
    ["big-brand", "desperate-startup", "reseller"],
    [("ssl", "Free SSL certificate", 10), ("renewal-lock", "Renewal price locked", 15), ("support", "Priority support", 8)],
-   [("renewal", "Renewal price far above first-year price", 50)],
+   [("renewal", "Renewal price far above first-year price", 12)],
    "A domain plus a year of hosting in one purchase."),
   ("ai-credits", "AI API credits", "online", "$50 of credits", "instant", 40, 50, 55, "credits",
    ["big-brand", "reseller", "desperate-startup"],
@@ -70,14 +76,14 @@ ROWS = [
   ("pro-inbox", "Custom-domain email inbox", "online", "1 year", "instant", 12, 36, 72, "online",
    ["big-brand", "reseller", "desperate-startup"],
    [("extra-alias", "Extra aliases", 6), ("storage", "More storage", 8)],
-   [("renewal", "Renewal at full list price", 20)],
+   [("renewal", "Renewal at full list price", 8)],
    "A professional contact address for the team."),
 
   # ---- Design
   ("ui-template", "UI template pack", "design", "1 license", "instant", 19, 49, 129, "digital",
    ["upseller", "desperate-startup", "big-brand"],
    [("updates", "Lifetime updates", 15), ("figma", "Figma source files", 20), ("extended", "Extended license", 30)],
-   [("commercial", "Commercial use costs extra", 40)],
+   [("commercial", "Commercial use costs extra", 12)],
    "Polished screens so the app looks finished fast."),
   ("icon-set", "Icon set license", "design", "1 license", "instant", 9, 29, 79, "digital",
    ["desperate-startup", "upseller", "big-brand"],
@@ -171,7 +177,7 @@ ROWS = [
   ("logo-designer", "Logo design", "freelancers", "1 logo", "service", 40, 120, 400, "freelance",
    ["pro-freelancer", "volume-studio", "student-freelancer"],
    [("concepts", "Extra concepts", 25), ("source", "Source files", 20), ("revision", "One extra revision", 15)],
-   [("source-fee", "Source files cost extra", 30)],
+   [("source-fee", "Source files cost extra", 20)],
    "A mark for Infinity Bazaar."),
   ("copywriter", "Landing page copywriter", "freelancers", "1 page", "service", 50, 120, 300, "freelance",
    ["pro-freelancer", "volume-studio", "student-freelancer"],
@@ -186,7 +192,7 @@ ROWS = [
   ("voiceover", "Voice-over artist", "freelancers", "3 minutes", "service", 30, 80, 200, "freelance",
    ["pro-freelancer", "volume-studio", "student-freelancer"],
    [("retake", "Free retake", 15), ("rush", "24-hour delivery", 25)],
-   [("usage", "Commercial usage fee", 25)],
+   [("usage", "Commercial usage fee", 15)],
    "A professional narrator for the demo video."),
   ("ux-review", "UX review of the app", "freelancers", "1 review", "service", 40, 100, 250, "freelance",
    ["pro-freelancer", "student-freelancer", "volume-studio"],
@@ -242,6 +248,40 @@ ROWS = [
    "For when the submission goes in."),
 ]
 
+# How each item reads inside a sentence ("I'm shopping for ...").
+PHRASES = {
+    "domain-dev": "a .dev domain name", "hosting-starter": "starter web hosting",
+    "domain-hosting": "a domain and hosting bundle", "ai-credits": "AI API credits",
+    "database-plan": "a managed database plan", "email-service": "a transactional email service",
+    "uptime-monitor": "uptime monitoring", "pro-inbox": "a custom-domain email inbox",
+    "ui-template": "a UI template pack", "icon-set": "an icon set license",
+    "stock-video": "stock video clips", "font-license": "a web font license",
+    "music-track": "a background music license", "illustration-pack": "an illustration pack",
+    "deck-template": "a pitch deck template", "device-mockups": "a device mockup pack",
+    "usb-mic": "a USB microphone", "webcam": "a 1080p webcam", "ring-light": "a ring light",
+    "green-screen": "a green screen", "mic-arm": "a mic boom arm", "usb-c-hub": "a USB-C hub",
+    "headphones": "noise-cancelling headphones", "portable-monitor": "a portable monitor",
+    "laptop-stand": "a laptop stand", "video-editor": "a video editor for a 3-minute demo",
+    "logo-designer": "a logo designer", "copywriter": "a landing page copywriter",
+    "pitch-coach": "a pitch coaching session", "voiceover": "a voice-over artist",
+    "ux-review": "a UX review", "motion-intro": "an animated logo intro",
+    "qa-tester": "a QA tester for a day", "pizza": "pizza for the team",
+    "energy-drinks": "a 12-pack of energy drinks", "hoodies": "team hoodies",
+    "stickers": "die-cut stickers", "coffee": "specialty coffee beans",
+    "cowork-pass": "a coworking day pass", "cake": "a celebration cake",
+}
+
+KEEP_CASE = ("SSL", "SMS", "WHOIS", "Figma", "Keynote", "YouTube", "4K", "Devpost")
+
+def phrase(label):
+    """Label as it reads mid-sentence: no trailing 'included', lower-case first word unless a name."""
+    if label.endswith(" included"):
+        label = label[: -len(" included")]
+    if label.startswith(KEEP_CASE):
+        return label
+    return label[0].lower() + label[1:]
+
+
 def floor_range(typ, prof):
     lo, hi = prof["costShare"]
     m = prof["minMargin"]
@@ -253,6 +293,7 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
     items.append({
         "id": iid,
         "name": name,
+        "phrase": PHRASES[iid],
         "group": group,
         "unit": unit,
         "description": desc,
@@ -263,15 +304,15 @@ for (iid, name, group, unit, delivery, low, typ, high, prof, sellers, levers, fe
         "seller": {"costProfile": prof, "costShare": p["costShare"], "minMargin": p["minMargin"],
                    "floorRange": floor_range(typ, p)},
         "sellerTypes": sellers,
-        "levers": [{"id": a, "label": b, "valueUsd": c} for a, b, c in levers],
-        # payNow: charged at checkout (shipping, setup). Otherwise a later cost (renewal, limits).
-        "hiddenFees": [{"id": a, "label": b, "valueUsd": c, "payNow": a in PAY_NOW} for a, b, c in fees],
+        "levers": [{"id": a, "label": phrase(b), "valueUsd": c} for a, b, c in levers],
+        # kind: "now" (charged at checkout), "later" (a certain later cost), "conditional" (a term).
+        "hiddenFees": [{"id": a, "label": phrase(b), "valueUsd": c, "payNow": a in PAY_NOW, "kind": fee_kind(a)} for a, b, c in fees],
     })
 
 catalog = {
     "version": 1,
     "updated": "2026-10-30",
-    "note": "Prices are USD estimates (confidence=estimate). The app refreshes them with live web search using verifyQuery.",
+    "note": "Prices are USD estimates (confidence=estimate). verifyQuery is a search phrase for checking each price.",
     "groups": [{"id": k, "name": v} for k, v in GROUPS.items()],
     "items": items,
 }
