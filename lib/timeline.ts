@@ -185,14 +185,35 @@ export interface BoothView {
   archetype: string;
   price: number;
   state: "open" | "out" | "won" | "blocked";
-  messages: { from: "agent" | "seller"; text: string; tag?: string; tagKind?: "detect" | "move" }[];
+  /** The agent's latest price sent to this seller, if any. */
+  offer: number | null;
+  /** A fee this seller revealed, added on top of the price. */
+  fee: number | null;
+  /** Counts of priced moves, so the screen can animate each one once. */
+  offerSeq: number;
+  askSeq: number;
+  messages: Message[];
+}
+
+export interface Message {
+  from: "agent" | "seller";
+  text: string;
+  tag?: string;
+  tagKind?: "detect" | "move";
+}
+
+/** One entry of the whole conversation, in the order it happened. */
+export interface TranscriptEntry extends Message {
+  /** Seller names the agent spoke to, or the seller who spoke. */
+  names: string[];
+  sellerIndex: number | null;
 }
 
 export interface CheckoutRow {
   text: string;
   tone: "info" | "ok" | "ask" | "bad";
   /** Rows from simulated PayPal steps, replaced by real calls in live mode. */
-  source?: "paypal";
+  source?: "paypal" | "guard";
   /** The PayPal API call behind this row, shown only with "Show PayPal details". */
   detail?: string;
 }
@@ -206,6 +227,9 @@ export interface View {
   commentary: string[];
   event: string | null;
   checkout: CheckoutRow[];
+  transcript: TranscriptEntry[];
+  /** The agent's latest priced move to any seller. */
+  agentOffer: number | null;
   guard: GuardDecision | null;
   statuses: LineStatus[];
   amounts: (number | null)[];
@@ -228,6 +252,9 @@ const AGENT_TAG: Partial<Record<string, string>> = {
   "accept-upsell": "Fell for the upsell",
 };
 
+/** Agent moves whose price is an offer on the table. */
+const PRICED_MOVES: string[] = ["anchor", "offer", "accept", "accept-upsell", "absorb-fee"];
+
 /** Statuses where money is committed (held or paid). */
 export const MONEY_COMMITTED: LineStatus[] = ["authorized", "captured"];
 
@@ -240,6 +267,8 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
   let commentary: string[] = [];
   let event: string | null = null;
   let checkout: CheckoutRow[] = [];
+  let transcript: TranscriptEntry[] = [];
+  let agentOffer: number | null = null;
   let guard: GuardDecision | null = null;
   let offerIndex = 0;
   let dealPrice: number | null = null;
@@ -253,8 +282,10 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     switch (step.type) {
       case "line-start": {
         line = step.line;
-        booths = ln.deal.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open", messages: [] }));
+        booths = ln.deal.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open", offer: null, fee: null, offerSeq: 0, askSeq: 0, messages: [] }));
         commentary = [];
+        transcript = [];
+        agentOffer = null;
         event = null;
         checkout = [];
         guard = null;
@@ -267,7 +298,25 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
       case "beat": {
         const b = step.beat;
         if (b.kind === "agent") {
-          for (const id of b.to) booths.find((x) => x.id === id)?.messages.push({ from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
+          const priced = b.price !== undefined && PRICED_MOVES.includes(b.move);
+          for (const id of b.to) {
+            const booth = booths.find((x) => x.id === id);
+            if (!booth) continue;
+            booth.messages.push({ from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
+            if (priced) {
+              booth.offer = b.price!;
+              booth.offerSeq++;
+            }
+          }
+          if (priced) agentOffer = b.price!;
+          transcript.push({
+            from: "agent",
+            text: b.text,
+            tag: AGENT_TAG[b.move],
+            tagKind: "move",
+            names: b.to.map((id) => booths.find((x) => x.id === id)?.name ?? id),
+            sellerIndex: null,
+          });
           if (b.price !== undefined && (b.move === "offer" || b.move === "anchor")) {
             const idx = ln.deal.plan.offers.indexOf(b.price);
             if (idx >= 0) offerIndex = idx;
@@ -281,7 +330,12 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
           const booth = booths.find((x) => x.id === b.sellerId);
           if (booth) {
             booth.messages.push({ from: "seller", text: b.text });
-            if (b.price !== undefined && (b.move === "counter" || b.move === "final" || b.move === "accept" || b.move === "absorb-fee")) booth.price = b.price;
+            transcript.push({ from: "seller", text: b.text, names: [booth.name], sellerIndex: booths.indexOf(booth) });
+            if (b.price !== undefined && (b.move === "counter" || b.move === "final" || b.move === "accept" || b.move === "absorb-fee")) {
+              if (b.price !== booth.price) booth.askSeq++;
+              booth.price = b.price;
+            }
+            if (b.price !== undefined && (b.move === "reveal-fee" || b.move === "surprise-fee")) booth.fee = b.price;
             if (b.move === "exit") booth.state = "out";
           }
         } else if (b.kind === "detect") {
@@ -291,6 +345,11 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
             last.tag = b.text;
             last.tagKind = "detect";
           } else booth?.messages.push({ from: "seller", text: "", tag: b.text, tagKind: "detect" });
+          const lastT = transcript.at(-1);
+          if (booth && lastT && lastT.from === "seller" && lastT.names[0] === booth.name && !lastT.tag) {
+            lastT.tag = b.text;
+            lastT.tagKind = "detect";
+          } else if (booth) transcript.push({ from: "seller", text: "", tag: b.text, tagKind: "detect", names: [booth.name], sellerIndex: booths.indexOf(booth) });
         } else if (b.kind === "event") {
           event = b.text;
         } else {
@@ -308,8 +367,8 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
           if (o.price !== undefined) winner.price = o.price;
         }
         checkout = [
-          ...step.guard.checks.map((c) => ({ text: `${c.pass ? "✓" : "✗"} ${c.label}`, tone: (c.pass ? "info" : "bad") as CheckoutRow["tone"] })),
-          { text: `AgentGuard: ${step.guard.summary}`, tone: step.guard.decision === "approve" ? "ok" : step.guard.decision === "ask_user" ? "ask" : "bad" },
+          ...step.guard.checks.map((c) => ({ text: `${c.pass ? "✓" : "✗"} ${c.label}`, tone: (c.pass ? "info" : "bad") as CheckoutRow["tone"], source: "guard" as const })),
+          { text: `AgentGuard: ${step.guard.summary}`, tone: step.guard.decision === "approve" ? "ok" : step.guard.decision === "ask_user" ? "ask" : "bad", source: "guard" },
         ];
         if (step.guard.decision === "block") {
           statuses[step.line] = "blocked";
@@ -322,7 +381,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         amounts[step.line] = o.amountToPay ?? null;
         break;
       case "decision":
-        checkout.push({ text: step.decision === "approved" ? "You approved the payment." : "You declined. No money moved.", tone: step.decision === "approved" ? "ok" : "bad" });
+        checkout.push({ text: step.decision === "approved" ? "You approved the payment." : "You declined. No money moved.", tone: step.decision === "approved" ? "ok" : "bad", source: "guard" });
         if (step.decision === "declined") {
           statuses[step.line] = "declined";
           amounts[step.line] = null;
@@ -343,7 +402,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
       case "line-end":
         revealFloors = true;
         if (statuses[step.line] === "negotiating") statuses[step.line] = "no-deal";
-        if (o.status !== "deal") checkout = [{ text: "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info" }];
+        if (o.status !== "deal") checkout = [{ text: "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info", source: "guard" }];
         break;
     }
   }
@@ -366,6 +425,8 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     commentary,
     event,
     checkout,
+    transcript,
+    agentOffer,
     guard,
     statuses,
     amounts,

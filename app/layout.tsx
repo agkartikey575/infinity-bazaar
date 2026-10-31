@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Figtree, JetBrains_Mono, Unbounded } from "next/font/google";
 import "./globals.css";
+
+// Self-hosted at build time, so fonts never block first paint.
+const display = Unbounded({ subsets: ["latin"], weight: ["500", "700", "800"], display: "swap", variable: "--font-display" });
+const body = Figtree({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap", variable: "--font-body" });
+const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "600", "700", "800"], display: "swap", variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Infinity Bazaar",
@@ -10,15 +16,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
-        />
-      </head>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

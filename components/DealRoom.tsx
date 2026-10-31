@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { catalog, getItem, missions, sellerData } from "../src/engine/index.ts";
+import { catalog, getItem, missions } from "../src/engine/index.ts";
 import {
   buildMissionRun,
   buildSingleRun,
   buildSteps,
   deriveView,
   stepDelay,
-  type BoothView,
   type Decision,
   type LineStatus,
   type Run,
 } from "../lib/timeline.ts";
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
+import { Arena, Caption, Gate, Transcript } from "./Arena.tsx";
 
 const SPEEDS = [0.5, 1, 2, 4];
-const FACE_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
 
 const STATUS_LABEL: Record<LineStatus, string> = {
   waiting: "Waiting",
@@ -32,45 +31,7 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   voided: "Hold released",
 };
 
-const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
 const money = (n: number) => `$${n.toFixed(2)}`;
-
-function Booth({ booth, color, floor }: { booth: BoothView; color: string; floor: number | null }) {
-  const logRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = logRef.current;
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
-  }, [booth.messages.length]);
-
-  return (
-    <div className={`booth ${booth.state}`}>
-      <div className="bhead">
-        <div className="face" style={{ background: color }} aria-hidden="true">
-          {booth.name[0]}
-        </div>
-        <div className="bname">
-          <h3>{booth.name}</h3>
-          <span>{archetypeLabel(booth.archetype)}</span>
-        </div>
-        <div className="bprice">
-          <span className="sr-only">{booth.name} asks </span>${booth.price}
-        </div>
-      </div>
-      {booth.state === "blocked" && <div className="stamp">Blocked by AgentGuard</div>}
-      <div className="log" ref={logRef}>
-        {booth.messages.map((m, k) => (
-          <div key={k} className={`msg ${m.from}`}>
-            <span className="who">{m.from === "agent" ? "Your agent" : booth.name}</span>
-            {m.text && <div className="b">{m.text}</div>}
-            {m.tag && <span className={`tag ${m.tagKind}`}>{m.tag}</span>}
-          </div>
-        ))}
-      </div>
-      {floor !== null && <div className="floor">Lowest they'd accept: ${floor}</div>}
-    </div>
-  );
-}
 
 function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
   let paid = 0;
@@ -268,7 +229,7 @@ export default function DealRoom() {
     const rows = live.lines[baseView.line]?.rows ?? [];
     const checkout = [
       ...baseView.checkout.filter((r) => r.source !== "paypal"),
-      ...rows.map((r) => ({ text: r.text, detail: [r.detail, r.debugId ? `PayPal debug id ${r.debugId}` : ""].filter(Boolean).join(" · ") || undefined, tone: "ok" as const })),
+      ...rows.map((r) => ({ text: r.text, detail: [r.detail, r.debugId ? `PayPal debug id ${r.debugId}` : ""].filter(Boolean).join(" · ") || undefined, tone: "ok" as const, source: "paypal" as const })),
     ];
     return { ...baseView, statuses, amounts, committedUsd, capturedUsd, pendingUsd, checkout };
   }, [baseView, live.enabled, live.lines, run]);
@@ -352,6 +313,32 @@ export default function DealRoom() {
   const asking = awaiting ? run.lines[waitingFor!] : null;
   const askItem = asking ? getItem(asking.itemId) : null;
   const askGuard = awaiting ? view.guard : null;
+
+  // The arena's numbers for the current line.
+  const deal = line?.deal;
+  const span = deal ? Math.max(...deal.sellers.map((s) => s.openAsk)) - deal.plan.anchor : 1;
+  // Before the first step, seat the sellers at their opening asks so the arena never starts empty.
+  const booths = view.booths.length
+    ? view.booths
+    : (deal?.sellers ?? []).map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open" as const, offer: null, fee: null, offerSeq: 0, askSeq: 0, messages: [] }));
+  const floors = booths.map((b) => (view.revealFloors ? deal?.sellers.find((s) => s.id === b.id)?.floor ?? null : null));
+  const lastAgent = [...view.transcript].reverse().find((m) => m.from === "agent") ?? null;
+  const lineStatus = view.statuses[view.line];
+  const arenaState =
+    lineStatus === "blocked"
+      ? "blocked"
+      : lineStatus === "no-deal"
+        ? "walked"
+        : view.dealPrice !== null || view.booths.some((b) => b.state === "won")
+          ? "deal"
+          : view.transcript.length
+            ? "talking"
+            : "idle";
+  // AgentGuard's checks sit in the gate; everything PayPal did sits in the Payment panel.
+  const gateRows = view.checkout.filter((r) => r.source === "guard");
+  const payRows = view.checkout.filter((r) => r.source !== "guard");
+  const blocked = view.guard?.decision === "block";
+  const pipe = blocked ? "cut" : awaiting || lineStatus === "awaiting-approval" || lineStatus === "paying" ? "hold" : payRows.length ? "flow" : "idle";
 
   return (
     <>
@@ -468,9 +455,9 @@ export default function DealRoom() {
             <span className="label">Budget</span>
             <div className="bbar">
               <span className="sr-only">Committed ${view.committedUsd} of ${run.budgetUsd}</span>
-              <div className="bfill" style={{ width: `${capturedShare}%` }} />
-              <div className="bheld" style={{ left: `${capturedShare}%`, width: `${heldShare}%` }} />
-              <div className="bpending" style={{ left: `${capturedShare + heldShare}%`, width: `${pendingShare}%` }} />
+              <div className="bfill" style={{ transform: `scaleX(${capturedShare / 100})` }} />
+              <div className="bheld" style={{ transform: `translateX(${capturedShare}%) scaleX(${heldShare / 100})` }} />
+              <div className="bpending" style={{ transform: `translateX(${capturedShare + heldShare}%) scaleX(${pendingShare / 100})` }} />
               <div className="bask" style={{ left: `${askLine}%` }} title={`Approval needed above $${run.askAboveUsd}`} />
             </div>
             <div className="bnums">
@@ -526,35 +513,39 @@ export default function DealRoom() {
           </div>
         )}
 
-        <div className="booths">
-          {view.booths.map((b, i) => (
-            <Booth
-              key={`${view.line}-${b.id}`}
-              booth={b}
-              color={FACE_COLORS[i % 3]}
-              floor={view.revealFloors ? run.lines[view.line].deal.sellers.find((s) => s.id === b.id)?.floor ?? null : null}
-            />
-          ))}
+        <div className="stage">
+          <Arena
+            booths={booths}
+            span={span}
+            floors={floors}
+            agentOffer={view.agentOffer}
+            target={view.plan?.target ?? null}
+            walkAway={view.plan?.walkAway ?? null}
+            agentSay={lastAgent}
+            state={arenaState}
+          />
+          <Caption lines={view.commentary} event={view.event} />
         </div>
 
-        <div className="rail">
-          <div>
-            <span className="label">Commentator</span>
-            <p className="caster">
-              {view.commentary[0] ?? "Press play to start."}
-            </p>
-            <div className="history">
-              {view.commentary.slice(1).map((c, i) => (
-                <span key={i}>· {c}</span>
-              ))}
-            </div>
-            {view.event && <div className="event">⚡ {view.event}</div>}
+        <div className={`pipeline ${pipe}`}>
+          <Gate
+            guard={view.guard}
+            rows={gateRows}
+            blockedAmount={blocked ? deal?.outcome.amountToPay ?? null : null}
+            blockedSeller={blocked ? deal?.outcome.sellerName ?? null : null}
+          />
+          <div className="pipe" aria-hidden="true">
+            <span>{pipe === "cut" ? "✕" : pipe === "hold" ? "❚❚" : "→"}</span>
           </div>
-          <div>
-            <span className="label">Payment</span>
+          <section className="paypal" aria-labelledby="paypal-title">
+            <h2 id="paypal-title" className="label">
+              Payment
+            </h2>
             <div className="checkout">
-              {view.checkout.length === 0 && <div className="row-info">Waiting for a deal…</div>}
-              {view.checkout.map((r, i) => (
+              {payRows.length === 0 && (
+                <div className={blocked ? "row-bad" : "row-info"}>{blocked ? "No payment was made. Nothing was sent to PayPal." : "Nothing sent to PayPal yet."}</div>
+              )}
+              {payRows.map((r, i) => (
                 <div key={i} className={`row-${r.tone}`}>
                   {r.text}
                   {showDetails && r.detail && <div className="row-detail">{r.detail}</div>}
@@ -593,8 +584,10 @@ export default function DealRoom() {
                   : "Live PayPal sandbox payments. Connect your wallet so the agent can pay approved items by itself, or approve each one in PayPal."
                 : "Demo mode: payments are simulated."}
             </span>
-          </div>
+          </section>
         </div>
+
+        <Transcript entries={view.transcript} names={booths.map((b) => b.name)} />
 
         <div className="list">
           <span className="label">Shopping list</span>
