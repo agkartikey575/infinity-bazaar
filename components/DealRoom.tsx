@@ -13,7 +13,7 @@ import {
   type LineStatus,
   type Run,
 } from "../lib/timeline.ts";
-import { useLivePayPal, type LiveState } from "./useLivePayPal.ts";
+import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 
 const SPEEDS = [0.5, 1, 2, 4];
 const FACE_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
@@ -137,6 +137,10 @@ export default function DealRoom() {
   const sheetRef = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
   const [seedDraft, setSeedDraft] = useState("42");
+  /** A fresh id for every Play, so real PayPal ids never repeat across visitors or replays. */
+  const [nonce, setNonce] = useState("startrun00");
+  // Random per visitor from the first Play; generated in the browser so server and client render the same.
+  useEffect(() => setNonce(newNonce()), []);
 
   const run = useMemo(() => {
     if (rogue) return buildSingleRun("usb-mic", seed, true);
@@ -151,8 +155,8 @@ export default function DealRoom() {
 
   // Real PayPal sandbox: the server pays; playback waits at each money step until it has.
   const runRef = useMemo(
-    () => ({ kind: run.kind, id: rogue ? "usb-mic" : selection.split(":")[1], seed }),
-    [run.kind, rogue, selection, seed],
+    () => ({ kind: run.kind, id: rogue ? "usb-mic" : selection.split(":")[1], seed, nonce }),
+    [run.kind, rogue, selection, seed, nonce],
   );
   const live = useLivePayPal(runRef);
   const pendingWin = useRef<Window | null>(null);
@@ -213,6 +217,7 @@ export default function DealRoom() {
       blocked: "blocked",
       "waiting-paypal": "awaiting-approval",
       "needs-click": "awaiting-approval",
+      "needs-decision": "awaiting-approval",
     };
     for (const [k, l] of Object.entries(live.lines)) {
       const i = Number(k);
@@ -281,6 +286,7 @@ export default function DealRoom() {
       setSeedDraft(String(next.seed));
     }
     setRogue(next.rogue ?? false);
+    setNonce(newNonce());
     setDecisions({});
     setCursor(0);
     setPlaying(true);
@@ -406,6 +412,7 @@ export default function DealRoom() {
                 />
                 Real PayPal sandbox
               </label>
+              {live.walletError && <span className="note">{live.walletError}</span>}
               {live.enabled &&
                 (live.status.wallet ? (
                   <span className="pill captured">Wallet connected</span>
@@ -527,10 +534,19 @@ export default function DealRoom() {
                 Pay with PayPal
               </button>
             )}
+            {live.enabled && live.lines[view.line]?.state === "needs-decision" && (
+              <div className="row-ask">
+                AgentGuard on the server wants your OK for this payment.{" "}
+                <button className="primary" onClick={() => live.pay(view.line, true, window.open("", "paypal", "width=480,height=720"))}>
+                  Approve
+                </button>{" "}
+                <button onClick={() => live.decline(view.line)}>Decline</button>
+              </div>
+            )}
             {live.enabled && live.lines[view.line]?.state === "error" && (
               <div className="row-bad">
                 PayPal error: {live.lines[view.line]?.error}{" "}
-                <button onClick={() => live.pay(view.line, decisions[view.line] === "approved")}>Retry</button>
+                <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>
             )}
             <span className="note">

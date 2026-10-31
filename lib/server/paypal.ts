@@ -65,6 +65,8 @@ export interface OrderRequest {
   feeCents: Cents;
   feeKind?: "shipping" | "handling";
   category: "PHYSICAL_GOODS" | "DIGITAL_GOODS";
+  /** Shipped goods ask PayPal for the buyer's address; digital goods and services don't. */
+  shipped: boolean;
   /** Charge a saved PayPal wallet with no buyer present. */
   vaultId?: string;
   returnUrl?: string;
@@ -99,7 +101,7 @@ export class PayPalClient {
     return data.access_token;
   }
 
-  /** One REST call. Retries once on a network error or 5xx with the same request id. */
+  /** One REST call. Retries once on a network error, a 5xx (same request id) or an expired token. */
   async call<T>(method: "GET" | "POST", path: string, body?: unknown, requestId?: string): Promise<Call<T>> {
     const label = `${method} ${path}`;
     for (let attempt = 0; ; attempt++) {
@@ -122,7 +124,17 @@ export class PayPalClient {
       }
       const debugId = res.headers.get("paypal-debug-id");
       const text = await res.text();
-      const data = (text ? JSON.parse(text) : {}) as T & { name?: string; message?: string; details?: { issue?: string }[] };
+      let parsed: unknown = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch {
+        parsed = { name: "BAD_RESPONSE", message: text.slice(0, 200) };
+      }
+      const data = parsed as T & { name?: string; message?: string; details?: { issue?: string }[] };
+      if (res.status === 401 && attempt === 0) {
+        this.cached = null;
+        continue;
+      }
       if (res.status >= 500 && attempt === 0) continue;
       if (!res.ok) throw new PayPalError(res.status, data.name ?? "PAYPAL_ERROR", data.message ?? res.statusText, data.details?.[0]?.issue ?? null, debugId);
       return { data, debugId, label };
@@ -136,7 +148,7 @@ export class PayPalClient {
     if (req.feeCents > 0) breakdown[req.feeKind ?? "handling"] = { currency_code: "USD", value: toValue(req.feeCents) };
     const experience = {
       brand_name: "Infinity Bazaar",
-      shipping_preference: "NO_SHIPPING",
+      shipping_preference: req.shipped ? "GET_FROM_FILE" : "NO_SHIPPING",
       user_action: "PAY_NOW",
       ...(req.returnUrl ? { return_url: req.returnUrl, cancel_url: req.cancelUrl ?? req.returnUrl } : {}),
     };
@@ -156,7 +168,11 @@ export class PayPalClient {
         ],
         payment_source: {
           paypal: req.vaultId
-            ? { vault_id: req.vaultId, stored_credential: { payment_initiator: "MERCHANT", usage: "SUBSEQUENT", usage_pattern: "UNSCHEDULED_POSTPAID" } }
+            ? {
+                vault_id: req.vaultId,
+                stored_credential: { payment_initiator: "MERCHANT", usage: "SUBSEQUENT", usage_pattern: "UNSCHEDULED_POSTPAID" },
+                experience_context: experience,
+              }
             : { experience_context: experience },
         },
       },
@@ -218,8 +234,13 @@ export class PayPalClient {
 /** The approval link in an order or setup-token response. */
 export const approveLink = (links?: OrderLink[]) => links?.find((l) => l.rel === "approve" || l.rel === "payer-action")?.href ?? null;
 
-/** Capture or authorization id from an order response. */
-export function paymentIds(order: Order): { captureId: string | null; authorizationId: string | null } {
+/** Capture or authorization from an order response, with PayPal's own status for it. */
+export function paymentIds(order: Order): { captureId: string | null; authorizationId: string | null; status: string | null } {
   const p = order.purchase_units?.[0]?.payments;
-  return { captureId: p?.captures?.[0]?.id ?? null, authorizationId: p?.authorizations?.[0]?.id ?? null };
+  const cap = p?.captures?.[0];
+  const auth = p?.authorizations?.[0];
+  return { captureId: cap?.id ?? null, authorizationId: auth?.id ?? null, status: cap?.status ?? auth?.status ?? null };
 }
+
+/** A capture counts once COMPLETED (or PENDING review); an authorization once CREATED (or PENDING). */
+export const paymentSucceeded = (status: string | null) => status === "COMPLETED" || status === "CREATED" || status === "PENDING";

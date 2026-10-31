@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const b = await readBody(req);
-    return ok(await complete(b.run, b.line, b.ledger, paypalClient()));
+    return ok({ ...(await complete(b.run, b.line, b.ledger, paypalClient())) });
   } catch (e) {
     return fail(e);
   }

@@ -1,8 +1,14 @@
 // The payment ledger for one run, signed by the server so the browser can hold
 // it without being able to change it. Works on serverless hosts with no database.
-import { createHmac, createHash, timingSafeEqual } from "node:crypto";
+//
+// What it guarantees: amounts, lines and states can't be edited, and a ledger
+// can't be moved to another run. What it doesn't: an older copy of the same
+// run's ledger can be sent again. Per-line PayPal request ids still stop any
+// line being paid twice; the budget is enforced per run.
+import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number };
+/** A run is a deterministic table plus a random nonce chosen each time you press Play. */
+export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number; nonce: string };
 
 export type EntryState = "pending_approval" | "authorized" | "captured" | "voided" | "declined" | "blocked";
 
@@ -12,8 +18,8 @@ export interface LedgerEntry {
   orderId?: string;
   authorizationId?: string;
   captureId?: string;
-  /** Request ids sent to PayPal for this line, so retries reuse them. */
-  requestIds?: string[];
+  /** Attempts at the approval step; a declined wallet gets a fresh request id. */
+  attempt?: number;
 }
 
 export interface Ledger {
@@ -25,7 +31,7 @@ export interface Ledger {
 /** Allowed state changes. Anything else is a bug or tampering, and throws. */
 const NEXT: Record<EntryState | "none", EntryState[]> = {
   none: ["pending_approval", "authorized", "captured", "declined", "blocked"],
-  pending_approval: ["authorized", "captured", "declined"],
+  pending_approval: ["pending_approval", "authorized", "captured", "declined"],
   authorized: ["captured", "voided"],
   captured: [],
   voided: [],
@@ -51,39 +57,47 @@ export function committedCents(l: Ledger): number {
 export function ledgerSecret(env: Record<string, string | undefined> = process.env): string {
   if (env.LEDGER_SECRET) return env.LEDGER_SECRET;
   // Derived from the PayPal secret so a deploy needs no extra setting; a fixed dev key otherwise.
-  return createHash("sha256").update(`infinity-bazaar-ledger:${env.PAYPAL_CLIENT_SECRET ?? "dev-only"}`).digest("hex");
+  return createHmac("sha256", "infinity-bazaar-ledger").update(env.PAYPAL_CLIENT_SECRET ?? "dev-only").digest("hex");
 }
 
 const b64 = (s: string) => Buffer.from(s).toString("base64url");
-const mac = (body: string, secret: string) => createHmac("sha256", secret).update(body).digest("base64url");
+/** Each purpose gets its own MAC, so a cookie can't be passed off as a ledger. */
+const mac = (purpose: string, body: string, secret: string) => createHmac("sha256", secret).update(`${purpose}:${body}`).digest("base64url");
+const same = (a: string, b: string) => {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
 
 export function signLedger(l: Ledger, secret = ledgerSecret()): string {
   const body = b64(JSON.stringify(l));
-  return `${body}.${mac(body, secret)}`;
+  return `${body}.${mac("ledger", body, secret)}`;
 }
 
 /** Returns the ledger, or null if the token was forged, edited, or is for another run. */
 export function readLedger(token: string | undefined | null, run: RunRef, secret = ledgerSecret()): Ledger | null {
   if (!token) return emptyLedger(run);
   const [body, sig] = token.split(".");
-  if (!body || !sig) return null;
-  const want = Buffer.from(mac(body, secret));
-  const got = Buffer.from(sig);
-  if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
-  const l = JSON.parse(Buffer.from(body, "base64url").toString()) as Ledger;
-  const same = l.run.kind === run.kind && l.run.id === run.id && l.run.seed === run.seed;
-  return same ? l : null;
+  if (!body || !sig || !same(mac("ledger", body, secret), sig)) return null;
+  let l: Ledger;
+  try {
+    l = JSON.parse(Buffer.from(body, "base64url").toString()) as Ledger;
+  } catch {
+    return null;
+  }
+  const match = l.run.kind === run.kind && l.run.id === run.id && l.run.seed === run.seed && l.run.nonce === run.nonce;
+  return match ? l : null;
 }
 
-/** A small signed value (the saved wallet's vault id) for an httpOnly cookie. */
-export function signValue(value: string, secret = ledgerSecret()): string {
+/** A small signed value (setup token, vault id) for an httpOnly cookie. */
+export function signValue(purpose: string, value: string, secret = ledgerSecret()): string {
   const body = b64(value);
-  return `${body}.${mac(body, secret)}`;
+  return `${body}.${mac(purpose, body, secret)}`;
 }
 
-export function readValue(token: string | undefined | null, secret = ledgerSecret()): string | null {
+export function readValue(purpose: string, token: string | undefined | null, secret = ledgerSecret()): string | null {
   if (!token) return null;
   const [body, sig] = token.split(".");
-  if (!body || !sig || mac(body, secret) !== sig) return null;
+  if (!body || !sig || !same(mac(purpose, body, secret), sig)) return null;
   return Buffer.from(body, "base64url").toString();
 }
