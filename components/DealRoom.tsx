@@ -179,7 +179,12 @@ export default function DealRoom() {
 
   useEffect(() => {
     if (!playing || !gate || gate.ready) return;
-    if ((live.lines[gate.line]?.state ?? "idle") !== "idle") return; // working, waiting for you, or failed
+    const state = live.lines[gate.line]?.state ?? "idle";
+    if (gate.action === "deliver") {
+      if (state === "authorized") live.deliver(gate.line);
+      return;
+    }
+    if (state !== "idle") return; // working, waiting for you, or failed
     if (gate.action === "pay") {
       const win = pendingWin.current;
       pendingWin.current = null;
@@ -188,6 +193,18 @@ export default function DealRoom() {
       live.deliver(gate.line);
     }
   }, [playing, gate?.line, gate?.action, gate?.ready, live.lines]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Latency: start the PayPal call as soon as AgentGuard has approved, while the
+  // check is still on screen, so the order is usually ready when playback gets there.
+  // Same calls, same order of events; only earlier.
+  useEffect(() => {
+    if (!live.enabled || !playing || cursor === 0) return;
+    const shown = steps[cursor - 1];
+    if (!shown) return;
+    const idle = (l: number) => (live.lines[l]?.state ?? "idle") === "idle";
+    if (shown.type === "guard" && shown.guard.decision === "approve" && idle(shown.line)) live.pay(shown.line, false);
+    if (shown.type === "event" && live.lines[shown.line]?.state === "authorized") live.deliver(shown.line);
+  }, [cursor, playing, live.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If you cancel in the PayPal window, the deal room records a decline.
   useEffect(() => {
