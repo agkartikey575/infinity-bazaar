@@ -18,3 +18,22 @@ jobs:
       - run: npm test
       - run: npx tsc --noEmit
       - run: npm run build
+
+  browser:
+    # Plays the deal room in a real browser at phone, tablet and desktop sizes, in demo mode.
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm i --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+      - name: Play the deal room
+        run: |
+          npx next start -p 3000 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000 >/dev/null && break; sleep 1; done
+          BASE_URL=http://localhost:3000 npm run e2e
