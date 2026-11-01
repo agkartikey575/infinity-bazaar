@@ -79,7 +79,7 @@ async function scenario(name, want, expectPill, expectPayPal) {
   const page = await ctx.newPage();
   try {
     await page.goto(BASE_URL, { waitUntil: "networkidle" });
-    await page.getByLabel(/PayPal \(sandbox\)/).check();
+    await page.getByLabel(/PayPal (\(sandbox\)|sandbox)/i).check();
     await page.locator("#selection").selectOption(`item:${t.item}`);
     await page.locator("#seed").fill(String(t.seed));
     await page.locator("#seed").press("Enter");
@@ -87,7 +87,17 @@ async function scenario(name, want, expectPill, expectPayPal) {
     const payBtn = page.getByRole("button", { name: "Pay with PayPal" });
     await payBtn.waitFor({ timeout: 120_000 });
     const [popup] = await Promise.all([page.waitForEvent("popup"), payBtn.click()]);
-    await approveInPayPal(popup);
+    try {
+      await approveInPayPal(popup);
+    } catch (e) {
+      // Keep what PayPal showed, for debugging selectors. Never logs credentials.
+      if (!popup.isClosed()) {
+        await popup.screenshot({ path: `/tmp/paypal-popup-${want}.png`, fullPage: true }).catch(() => undefined);
+        await import("node:fs").then((fs) => popup.content().then((html) => fs.writeFileSync(`/tmp/paypal-popup-${want}.html`, html))).catch(() => undefined);
+        console.log(`  popup url: ${popup.url().split("?")[0]}`);
+      }
+      throw e;
+    }
     await page.locator(".list .pill", { hasText: expectPill }).first().waitFor({ timeout: 120_000 });
 
     await page.getByLabel("Show PayPal details").check();
