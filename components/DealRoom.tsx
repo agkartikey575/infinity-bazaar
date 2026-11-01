@@ -13,7 +13,7 @@ import {
   type Run,
 } from "../lib/timeline.ts";
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
-import { Arena, Caption, Gate, Transcript } from "./Arena.tsx";
+import { Arena, Caption, Gate } from "./Arena.tsx";
 
 const SPEEDS = [0.5, 1, 2, 4];
 
@@ -96,7 +96,7 @@ export default function DealRoom() {
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(2);
+  const [speed, setSpeed] = useState(1);
   const approveRef = useRef<HTMLButtonElement>(null);
   const [showDetails, setShowDetails] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -325,7 +325,6 @@ export default function DealRoom() {
     ? view.booths
     : (deal?.sellers ?? []).map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open" as const, offer: null, fee: null, offerSeq: 0, askSeq: 0, messages: [] }));
   const floors = booths.map((b) => (view.revealFloors ? deal?.sellers.find((s) => s.id === b.id)?.floor ?? null : null));
-  const lastAgent = [...view.transcript].reverse().find((m) => m.from === "agent") ?? null;
   const lineStatus = view.statuses[view.line];
   const arenaState =
     lineStatus === "blocked"
@@ -351,11 +350,11 @@ export default function DealRoom() {
           <h1>
             Infinity Bazaar<span className="inf">∞</span>
           </h1>
-          <span className="eyebrow">Deal room</span>
+          <span className="eyebrow">Your AI haggles. Your rules guard the money.</span>
         </div>
         <div className="controls">
           <label className="field">
-            <span className="label">Mission or item</span>
+            <span className="label">Mission</span>
             <select id="selection" value={rogue ? "" : selection} onChange={(e) => restart({ selection: e.target.value, seed })}>
               {rogue && <option value="">Stress test: agent goes rogue</option>}
               <optgroup label="Missions">
@@ -379,7 +378,7 @@ export default function DealRoom() {
             </select>
           </label>
           <label className="field table-no">
-            <span className="label">Table #</span>
+            <span className="label">Table</span>
             <input
               id="seed"
               inputMode="numeric"
@@ -400,13 +399,13 @@ export default function DealRoom() {
             >
               {finished ? "↺ Replay" : gate && !gate.ready && playing ? "Waiting for PayPal…" : playing ? "❚❚ Pause" : "▶ Play"}
             </button>
-            <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Shuffle sellers, floors and events">
+            <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Deal a new table: new sellers, new prices, new surprises">
               🎲 New table
             </button>
             <button onClick={skip} disabled={cursor >= steps.length || Boolean(gate && !gate.ready)} aria-label="Skip to the next decision or the end">
               ⏭ Skip
             </button>
-            <button className="danger" onClick={() => restart({ seed, rogue: true })}>
+            <button className="danger" onClick={() => restart({ seed, rogue: true })} title="Watch a pushy seller talk the agent into a bad deal — and AgentGuard stop it.">
               Agent goes rogue
             </button>
           </div>
@@ -422,7 +421,7 @@ export default function DealRoom() {
           </label>
           {live.status.mode === "sandbox" && (
             <div className="paypal-mode">
-              <label className="switch">
+              <label className="switch" title="Pay with real PayPal sandbox accounts instead of demo payments">
                 <input
                   type="checkbox"
                   checked={live.enabled}
@@ -431,7 +430,7 @@ export default function DealRoom() {
                     restart({ seed, rogue });
                   }}
                 />
-                Live payments (PayPal sandbox)
+                Real PayPal (sandbox)
               </label>
               {live.walletError && <span className="note">{live.walletError}</span>}
               {live.enabled &&
@@ -452,7 +451,7 @@ export default function DealRoom() {
           <div className="goal-box">
             <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Stress test" : "Single deal"}</span>
             <p className="goal">“{run.goal}”</p>
-            <span className="note">Table #{run.seed} always replays the same deal.</span>
+            <span className="note">Table {run.seed} always replays the same deal.</span>
           </div>
           <div className="budget">
             <span className="label">Budget</span>
@@ -503,7 +502,7 @@ export default function DealRoom() {
               <b>${view.plan.walkAway}</b>
             </div>
             <div className="ladder" aria-label="Agent's planned offers">
-              <span className="label">{item.name} · offer ladder</span>
+              <span className="label">{item.name} · planned offers</span>
               <div className="rungs">
                 {view.plan.offers.map((o, i) => (
                   <span key={o} className={`rung${view.dealPrice === null && i === view.offerIndex ? " now" : i <= view.offerIndex ? " used" : ""}`}>
@@ -519,12 +518,12 @@ export default function DealRoom() {
         <div className="stage">
           <Arena
             booths={booths}
+            lineKey={`${run.kind}:${run.seed}:${run.title}:${view.line}`}
             span={span}
             floors={floors}
             agentOffer={view.agentOffer}
             target={view.plan?.target ?? null}
             walkAway={view.plan?.walkAway ?? null}
-            agentSay={lastAgent}
             state={arenaState}
           />
           <Caption lines={view.commentary} event={view.event} />
@@ -591,8 +590,6 @@ export default function DealRoom() {
             </span>
           </section>
         </div>
-
-        <Transcript entries={view.transcript} names={booths.map((b) => b.name)} />
 
         <div className="list">
           <span className="label">Shopping list</span>

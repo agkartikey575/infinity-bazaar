@@ -441,23 +441,26 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
 export function stepDelay(step: Step): number {
   switch (step.type) {
     case "line-start":
-      return 600;
+      return 400;
     case "beat": {
+      // Reading pace for chat and commentary; everything else stays snappy.
       const b = step.beat;
-      if (b.kind === "commentary") return 250;
-      if (b.kind === "detect") return 700;
-      if (b.kind === "event") return 1500;
-      return Math.min(2600, 700 + b.text.length * 13);
+      if (b.kind === "commentary") return clamp(1600 + 32 * b.text.length, 2200, 4500);
+      if (b.kind === "detect") return 900;
+      if (b.kind === "event") return 1600;
+      return clamp(1300 + 38 * b.text.length, 1800, 4800);
     }
     case "guard":
-      return 1500;
+      return 1100;
     case "paypal":
-      return 1200;
+      return 800;
     case "event":
-      return 1400;
+      return 1200;
     case "line-end":
-      return 2000;
+      return 1400;
     default:
-      return 600;
+      return 400;
   }
 }
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));

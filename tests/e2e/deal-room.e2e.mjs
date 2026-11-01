@@ -96,7 +96,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.deepEqual(await pills(page), exp.pills.map(() => "Waiting"));
     await page.selectOption("#speed", "4");
     await btn(page, "Play").click();
-    await page.waitForSelector(".booth .say p:not(.quiet)", { timeout: 5000 });
+    await page.waitForSelector(".booth .msg", { state: "attached", timeout: 8000 });
     await page.waitForTimeout(3000);
     await playToEnd(page, "approved");
     await page.waitForTimeout(800);
@@ -108,12 +108,10 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await page.locator(".checkout").innerText(), /POST \/v2\//);
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
     assert.equal(await page.locator(".receipt tbody tr").count(), exp.pills.length, "receipt lists every item");
-    assert.equal(await page.locator(".booth").count(), 3, "three sellers in the arena");
-    await page.locator(".transcript summary").click();
-    await page.waitForTimeout(300);
-    assert.ok((await page.locator(".transcript .msg").count()) > 3, "transcript keeps the whole conversation");
-    const gap = await page.$eval(".transcript .log", (e) => e.scrollHeight - e.scrollTop - e.clientHeight);
-    assert.ok(gap <= 2, `transcript scrolled to the newest message: ${gap}`);
+    assert.equal(await page.locator(".booth").count(), 3, "three booths in the arena");
+    const gaps = await page.$$eval(".booth .log", (els) => els.filter((e) => e.offsetParent).map((e) => e.scrollHeight - e.scrollTop - e.clientHeight));
+    assert.ok(gaps.length >= 1, "at least one booth is visible");
+    assert.ok(gaps.every((g) => g <= 2), `booth logs scrolled to the newest message: ${gaps}`);
   });
 
   await check(`${w}px: approval sheet, approve (table ${askSeed})`, viewport, async (page) => {
@@ -189,6 +187,29 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     }
   });
 }
+
+await check("1440px: all three booths show a one-on-one chat after Skip", { width: 1440, height: 900 }, async (page) => {
+  await skip(page);
+  const counts = await page.$$eval(".booth", (els) => els.map((e) => [e.offsetParent !== null, e.querySelectorAll(".msg .b").length]));
+  assert.equal(counts.length, 3, "three booths");
+  for (const [visible, n] of counts) {
+    assert.ok(visible, "every booth is visible side by side");
+    assert.ok(n >= 2, `each booth shows at least two chat bubbles: ${JSON.stringify(counts)}`);
+  }
+  const sides = await page.$$eval(".booth .msg", (els) => els.map((e) => [e.classList.contains("agent") ? "agent" : "seller", getComputedStyle(e).alignSelf]));
+  assert.ok(sides.every(([who, a]) => (who === "agent" ? a === "flex-end" : a === "flex-start")), "agent on the right, seller on the left");
+});
+
+await check("390px: booth tabs show one booth at a time", { width: 390, height: 844 }, async (page) => {
+  await skip(page);
+  const tabs = page.locator(".tabs .tab");
+  assert.equal(await tabs.count(), 3, "three booth tabs");
+  assert.equal(await page.locator(".booth:visible").count(), 1, "one booth visible");
+  await tabs.nth(2).click();
+  assert.equal(await tabs.nth(2).getAttribute("aria-pressed"), "true");
+  const shown = await page.locator(".booth:visible").getAttribute("id");
+  assert.equal(shown, await tabs.nth(2).getAttribute("aria-controls"), "tapped tab shows its booth");
+});
 
 await check("pause stops playback", { width: 1440, height: 900 }, async (page) => {
   await btn(page, "Play").click();

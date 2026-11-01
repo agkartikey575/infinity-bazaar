@@ -1,30 +1,31 @@
 "use client";
 
-// The arena: your agent in the middle, three sellers around it, and a tether
-// from each seller to the agent whose open gap is the price gap between them.
-// Below it, the broadcast caption, the AgentGuard gate and the PayPal rail.
+// The arena: a slim strip for your agent, then three one-on-one booths, one per
+// seller. Each booth closes with a gap bar between the seller's ask and the
+// agent's offer. Below it, the broadcast caption, the AgentGuard gate and the
+// Payment panel.
 import { useEffect, useRef, useState } from "react";
 import { sellerData } from "../src/engine/index.ts";
-import type { BoothView, CheckoutRow, TranscriptEntry } from "../lib/timeline.ts";
+import type { BoothView, CheckoutRow } from "../lib/timeline.ts";
 import type { GuardDecision } from "../src/engine/index.ts";
 
 export const SEAT_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
 const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
 const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
 
-type TetherTone = "idle" | "open" | "close" | "met" | "over" | "out" | "won" | "blocked";
+type GapTone = "idle" | "open" | "close" | "met" | "over" | "out" | "won" | "blocked";
 
-interface Tether {
-  tone: TetherTone;
-  /** How much of the tether is still open, 0 (met) to 1 (far apart). */
+interface Gap {
+  tone: GapTone;
+  /** How much of the bar is still open, 0 (met) to 1 (far apart). */
   open: number;
   label: string;
   /** Spoken version for screen readers. */
   spoken: string;
 }
 
-/** Works out the tether between a seller's ask and the agent's offer to them. */
-export function tetherFor(b: BoothView, span: number): Tether {
+/** Works out the gap between a seller's ask and the agent's offer to them. */
+export function gapFor(b: BoothView, span: number): Gap {
   if (b.state === "blocked") return { tone: "blocked", open: 0, label: `Blocked $${b.price}`, spoken: `deal at $${b.price} blocked by AgentGuard` };
   if (b.state === "won") return { tone: "won", open: 0, label: `Deal $${b.price}`, spoken: `deal at $${b.price}` };
   if (b.state === "out") return { tone: "out", open: 1, label: "Out", spoken: "out of the running" };
@@ -36,16 +37,38 @@ export function tetherFor(b: BoothView, span: number): Tether {
   return { tone: open <= 0.25 ? "close" : "open", open, label: `$${gap} apart`, spoken: `$${gap} apart` };
 }
 
-function lastFrom(b: BoothView, from: "agent" | "seller") {
-  for (let i = b.messages.length - 1; i >= 0; i--) if (b.messages[i].from === from) return b.messages[i];
-  return null;
+function GapBar({ booth, gap }: { booth: BoothView; gap: Gap }) {
+  const seg = (1 - gap.open) * 50;
+  return (
+    <div className={`gapbar ${gap.tone}`}>
+      <span className="g-end you">{booth.offer !== null ? `You $${booth.offer}` : "You —"}</span>
+      <span className="g-bar" aria-hidden="true">
+        <i className="g-agent" style={{ transform: `scaleX(${gap.tone === "idle" ? 0 : seg / 50})` }} />
+        <i className="g-seller" style={{ transform: `scaleX(${(gap.tone === "idle" ? 8 : seg) / 50})` }} />
+        <b>{gap.label}</b>
+      </span>
+      <span className="sr-only">{gap.spoken}</span>
+      <span className="g-end ask">Ask ${booth.price}</span>
+    </div>
+  );
 }
 
-function SellerSeat({ booth, index, floor, tether }: { booth: BoothView; index: number; floor: number | null; tether: Tether }) {
-  const said = lastFrom(booth, "seller");
-  const seg = (1 - tether.open) * 50;
+function Booth({ booth, index, floor, gap, active, id }: { booth: BoothView; index: number; floor: number | null; gap: Gap; active: boolean; id: string }) {
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+  }, [booth.messages.length]);
+  // A booth shown again on a phone jumps straight to its newest message.
+  useEffect(() => {
+    const el = logRef.current;
+    if (active && el) el.scrollTop = el.scrollHeight;
+  }, [active]);
+
   return (
-    <article className={`booth seat s${index} ${booth.state}`} aria-label={`${booth.name}, asks $${booth.price}, ${tether.spoken}`}>
+    <article id={id} className={`booth s${index} ${booth.state}${active ? " active" : ""}`} aria-label={`${booth.name}, asks $${booth.price}`}>
       <header className="bhead">
         <div className="face" style={{ background: SEAT_COLORS[index % 3] }} aria-hidden="true">
           {booth.name[0]}
@@ -62,139 +85,126 @@ function SellerSeat({ booth, index, floor, tether }: { booth: BoothView; index: 
           {booth.fee !== null && <small>+${booth.fee} fee</small>}
         </div>
       </header>
-      <div className="say seller-say" aria-live="off">
-        {said?.text ? <p>{said.text}</p> : <p className="quiet">{booth.state === "out" ? "Left the table." : "Waiting for the agent…"}</p>}
-        {said?.tag && <span className={`tag ${said.tagKind}`}>{said.tag}</span>}
+      <div className="log" ref={logRef} tabIndex={0} aria-label={`Chat with ${booth.name}`}>
+        {booth.messages.length === 0 && <p className="quiet">Waiting for your agent to make the first offer…</p>}
+        {booth.messages.map((m, k) => (
+          <div key={k} className={`msg ${m.from}`}>
+            <span className="who">{m.from === "agent" ? "Your agent" : booth.name}</span>
+            {m.text && <div className="b">{m.text}</div>}
+            {m.tag && <span className={`tag ${m.tagKind}`}>{m.tag}</span>}
+          </div>
+        ))}
       </div>
-      <div className={`tether ${tether.tone}`} aria-hidden="true">
-        <span className="t-end you">{booth.offer !== null ? `You $${booth.offer}` : "You —"}</span>
-        <span className="t-bar">
-          <i className="t-agent" style={{ transform: `scaleX(${seg / 50})` }} />
-          <i className="t-seller" style={{ transform: `scaleX(${(tether.tone === "idle" ? 8 : seg) / 50})` }} />
-          <b>{tether.label}</b>
-        </span>
-        <span className="t-end ask">Ask ${booth.price}</span>
-      </div>
-      {floor !== null && <div className="floor">Lowest they'd accept: ${floor}</div>}
+      <footer className="bfoot">
+        <GapBar booth={booth} gap={gap} />
+        {floor !== null && <div className="floor">Lowest they'd accept: ${floor}</div>}
+      </footer>
     </article>
   );
 }
 
-/** Desktop only: the three tethers drawn from each seller down to the agent, in real pixels. */
-function Wires({ booths, tethers }: { booths: BoothView[]; tethers: Tether[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 1200, h: 110 });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setSize({ w: Math.max(1, e.contentRect.width), h: Math.max(1, e.contentRect.height) }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  const { w, h } = size;
-  // Only animate a price that moved by one step; a Skip that jumps many steps stays still.
-  const seen = useRef<Record<string, { o: number; a: number; oMove: boolean; aMove: boolean }>>({});
-  for (const b of booths) {
-    const p = seen.current[b.id] ?? { o: 0, a: 0, oMove: false, aMove: false };
-    if (b.offerSeq !== p.o) seen.current[b.id] = { ...p, o: b.offerSeq, oMove: b.offerSeq === p.o + 1 };
-    const q = seen.current[b.id] ?? p;
-    if (b.askSeq !== q.a) seen.current[b.id] = { ...q, a: b.askSeq, aMove: b.askSeq === q.a + 1 };
-  }
-  const ends = booths.map((_, i) => ({ sx: (w * (1 + 2 * i)) / 6, ax: w / 2 + (i - 1) * Math.min(44, w * 0.035) }));
-  return (
-    <div className="wires" ref={ref} aria-hidden="true">
-      <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
-        {booths.map((b, i) => {
-          const { sx, ax } = ends[i];
-          const t = tethers[i];
-          // Each side is half the wire, scaled from its own end: the unscaled middle is the gap.
-          const k = 1 - t.open;
-          const mx = (sx + ax) / 2;
-          const my = h / 2;
-          return (
-            <g key={b.id} className={`wire ${t.tone}`}>
-              <line className="w-track" x1={sx} y1={0} x2={ax} y2={h} />
-              <line className="w-seller" x1={sx} y1={0} x2={mx} y2={my} style={{ transformOrigin: `${sx}px 0px`, transform: `scale(${t.tone === "idle" ? 0.16 : k})` }} />
-              <line className="w-agent" x1={ax} y1={h} x2={mx} y2={my} style={{ transformOrigin: `${ax}px ${h}px`, transform: `scale(${t.tone === "idle" ? 0 : k})` }} />
-            </g>
-          );
-        })}
-      </svg>
-      {booths.map((b, i) => {
-        const { sx, ax } = ends[i];
-        const t = tethers[i];
-        const pos = { "--ax": `${ax}px`, "--dx": `${sx - ax}px`, "--dy": `${-h}px` } as React.CSSProperties;
-        return (
-          <div key={b.id} style={pos}>
-            <span className={`knot ${t.tone}`} key={`${t.tone}-${t.label}`} style={{ left: `${(sx + ax) / 2}px` }}>
-              {t.label}
-            </span>
-            {b.offerSeq > 0 && b.offer !== null && seen.current[b.id]?.oMove && (
-              <span key={`o${b.offerSeq}`} className="chip out">
-                ${b.offer}
-              </span>
-            )}
-            {b.askSeq > 0 && seen.current[b.id]?.aMove && (
-              <span key={`a${b.askSeq}`} className="chip in">
-                ${b.price}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+const STATE_WORD = { idle: "ready", talking: "haggling", deal: "agreed", walked: "walked away", blocked: "stopped" } as const;
+export type ArenaState = keyof typeof STATE_WORD;
 
 export function Arena({
   booths,
+  lineKey,
   span,
   floors,
   agentOffer,
   target,
   walkAway,
-  agentSay,
   state,
 }: {
   booths: BoothView[];
+  /** Changes when a new item starts, so phone tabs reset. */
+  lineKey: string;
   span: number;
   floors: (number | null)[];
   agentOffer: number | null;
   target: number | null;
   walkAway: number | null;
-  agentSay: { text: string; tag?: string } | null;
-  state: "idle" | "talking" | "deal" | "blocked" | "walked";
+  state: ArenaState;
 }) {
-  const tethers = booths.map((b) => tetherFor(b, span));
+  const gaps = booths.map((b) => gapFor(b, span));
+
+  // Phone tabs: follow the booth with the newest message, unless the player picked one.
+  const [picked, setPicked] = useState<string | null>(null);
+  const [latest, setLatest] = useState<string | null>(null);
+  const [unread, setUnread] = useState<string[]>([]);
+  const counts = useRef<Record<string, number>>({});
+  useEffect(() => {
+    setPicked(null);
+    setLatest(null);
+    setUnread([]);
+    counts.current = {};
+  }, [lineKey]);
+  const countKey = booths.map((b) => b.messages.length).join(",");
+  const shown = picked ?? latest ?? booths[0]?.id ?? null;
+  useEffect(() => {
+    let newest: string | null = null;
+    const grew: string[] = [];
+    for (const b of booths) {
+      if (b.messages.length > (counts.current[b.id] ?? 0)) {
+        grew.push(b.id);
+        if (b.messages.at(-1)?.from === "seller" || newest === null) newest = b.id;
+      }
+      counts.current[b.id] = b.messages.length;
+    }
+    if (!grew.length) return;
+    if (newest) setLatest(newest);
+    const visible = picked ?? newest;
+    setUnread((u) => [...new Set([...u, ...grew])].filter((id) => id !== visible));
+  }, [countKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (id: string) => {
+    setPicked(id);
+    setUnread((u) => u.filter((x) => x !== id));
+  };
+
   return (
     <div className={`arena ${state}`}>
-      <div className="seats">
-        {booths.map((b, i) => (
-          <SellerSeat key={b.id} booth={b} index={i} floor={floors[i]} tether={tethers[i]} />
-        ))}
-      </div>
-      {booths.length > 0 && <Wires booths={booths} tethers={tethers} />}
-      <div className="agent" aria-label="Your agent">
+      <div className="agent-strip" aria-label="Your agent">
         <div className="medal" aria-hidden="true">
           ∞
         </div>
-        <div className="agent-id">
-          <span className="label">Your agent</span>
-          <div className="agent-offer">
-            <span className="sr-only">Current offer </span>
-            {agentOffer !== null ? `$${agentOffer}` : "—"}
-            <small>{state === "deal" ? "agreed" : state === "blocked" ? "stopped" : agentOffer !== null ? "on the table" : "no offer yet"}</small>
-          </div>
-          {target !== null && walkAway !== null && (
-            <span className="agent-plan">
-              Target ${target} · walks at ${walkAway}
-            </span>
+        <span className="agent-name">Your agent</span>
+        <span className="agent-offer">
+          {agentOffer !== null ? (
+            <>
+              <b>${agentOffer}</b> {state === "deal" ? "agreed" : "on the table"}
+            </>
+          ) : (
+            "No offer yet"
           )}
-        </div>
-        <div className="say agent-say">
-          {agentSay ? <p>{agentSay.text}</p> : <p className="quiet">Press play to open the table.</p>}
-          {agentSay?.tag && <span className="tag move">{agentSay.tag}</span>}
-        </div>
+        </span>
+        {target !== null && walkAway !== null && (
+          <span className="agent-plan">
+            Target ${target} · walks at ${walkAway}
+          </span>
+        )}
+        <span className={`agent-state ${state}`}>{STATE_WORD[state]}</span>
+      </div>
+
+      <div className="tabs" role="group" aria-label="Booths">
+        {booths.map((b, i) => (
+          <button
+            key={b.id}
+            className={`tab s${i}${shown === b.id ? " on" : ""}`}
+            aria-pressed={shown === b.id}
+            aria-controls={`booth-${b.id}`}
+            onClick={() => pick(b.id)}
+          >
+            <span className="tab-name">{b.name}</span>
+            <span className="tab-ask">${b.price}</span>
+            {unread.includes(b.id) && <i className="unread" aria-label="new message" />}
+          </button>
+        ))}
+      </div>
+
+      <div className="booths">
+        {booths.map((b, i) => (
+          <Booth key={b.id} id={`booth-${b.id}`} booth={b} index={i} floor={floors[i]} gap={gaps[i]} active={shown === b.id} />
+        ))}
       </div>
     </div>
   );
@@ -281,49 +291,5 @@ export function Gate({
         ))}
       </div>
     </section>
-  );
-}
-
-/** The whole conversation in one drawer, newest at the bottom. */
-export function Transcript({ entries, names }: { entries: TranscriptEntry[]; names: string[] }) {
-  const ref = useRef<HTMLDetailsElement>(null);
-  const logRef = useRef<HTMLDivElement>(null);
-  const toBottom = (smooth: boolean) => {
-    const el = logRef.current;
-    if (!el || !ref.current?.open) return;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    el.scrollTo({ top: el.scrollHeight, behavior: smooth && !reduce ? "smooth" : "auto" });
-  };
-  useEffect(() => toBottom(true), [entries.length]);
-  return (
-    <details className="transcript" ref={ref} onToggle={() => toBottom(false)}>
-      <summary>
-        <span className="label">Full transcript</span>
-        <span className="count">
-          {entries.length} {entries.length === 1 ? "message" : "messages"}
-        </span>
-      </summary>
-      <div className="log" ref={logRef} tabIndex={0} aria-label="Negotiation transcript">
-        {entries.length === 0 && <p className="note">Nothing said yet.</p>}
-        {entries.map((m, k) => {
-          const to = m.names.length === names.length && names.length > 1 ? "all sellers" : m.names.join(", ");
-          return (
-            <div key={k} className={`msg ${m.from}`}>
-              <span className="who">
-                {m.from === "agent" ? (
-                  <>Your agent → {to}</>
-                ) : (
-                  <>
-                    <i className="dot" style={{ background: SEAT_COLORS[(m.sellerIndex ?? 0) % 3] }} /> {m.names[0]}
-                  </>
-                )}
-              </span>
-              {m.text && <div className="b">{m.text}</div>}
-              {m.tag && <span className={`tag ${m.tagKind}`}>{m.tag}</span>}
-            </div>
-          );
-        })}
-      </div>
-    </details>
   );
 }
