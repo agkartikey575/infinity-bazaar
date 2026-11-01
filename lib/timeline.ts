@@ -445,10 +445,12 @@ export function stepDelay(step: Step): number {
     case "beat": {
       // Reading pace for chat and commentary; everything else stays snappy.
       const b = step.beat;
-      if (b.kind === "commentary") return clamp(1600 + 32 * b.text.length, 2200, 4500);
+      // Commentary plays over the chat: the bar keeps the line (and the one before it)
+      // on screen while the next messages arrive, so it needs only a short beat of its own.
+      if (b.kind === "commentary") return 1200;
       if (b.kind === "detect") return 900;
       if (b.kind === "event") return 1600;
-      return clamp(1300 + 38 * b.text.length, 1800, 4800);
+      return clamp(1100 + 34 * b.text.length, 1600, 4400);
     }
     case "guard":
       return 1100;

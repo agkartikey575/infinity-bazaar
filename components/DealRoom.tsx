@@ -15,7 +15,7 @@ import {
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 import { Arena, Caption, Gate } from "./Arena.tsx";
 
-const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [0.5, 1, 1.5, 2, 4];
 
 const STATUS_LABEL: Record<LineStatus, string> = {
   waiting: "Waiting",
