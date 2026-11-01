@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Figtree, JetBrains_Mono, Unbounded } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// Self-hosted at build time, so fonts never block first paint.
-const display = Unbounded({ subsets: ["latin"], weight: ["500", "700", "800"], display: "swap", variable: "--font-display" });
-const body = Figtree({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap", variable: "--font-body" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "600", "700", "800"], display: "swap", variable: "--font-mono" });
+// Fonts ship with the app (latin, variable weight; SIL Open Font License, see app/fonts),
+// so builds need no network and text never waits on a font server.
+const display = localFont({ src: "./fonts/unbounded.woff2", weight: "500 800", display: "swap", variable: "--font-display" });
+const body = localFont({ src: "./fonts/figtree.woff2", weight: "400 700", display: "swap", variable: "--font-body" });
+const mono = localFont({ src: "./fonts/jetbrains-mono.woff2", weight: "400 800", display: "swap", variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Infinity Bazaar",
