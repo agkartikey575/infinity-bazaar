@@ -134,7 +134,7 @@ function Booth({
   );
 }
 
-const STATE_WORD = { idle: "ready", talking: "haggling", deal: "agreed", walked: "walked away", blocked: "stopped" } as const;
+const STATE_WORD = { idle: "ready", talking: "haggling", deal: "agreed", walked: "walked away", blocked: "stopped", declined: "declined", released: "not delivered" } as const;
 export type ArenaState = keyof typeof STATE_WORD;
 
 /** True below the width where booths stack into tabs. */
@@ -215,6 +215,8 @@ export function Arena({
   let offerText: React.ReactNode = "No offer yet";
   if (state === "blocked" && dealPrice !== null) offerText = <>Agreed to <b>${dealPrice}</b> — blocked by AgentGuard</>;
   else if (state === "deal" && dealPrice !== null) offerText = <><b>${dealPrice}</b> agreed</>;
+  else if (state === "declined" && dealPrice !== null) offerText = <>Agreed <b>${dealPrice}</b> — you declined, nothing paid</>;
+  else if (state === "released" && dealPrice !== null) offerText = <><b>${dealPrice}</b> held — not delivered, so the hold was released</>;
   else if (state === "walked") offerText = agentOffer !== null ? <>No deal · last offer <b>${agentOffer}</b></> : "No deal";
   else if (agentOffer !== null) offerText = <><b>${agentOffer}</b> on the table</>;
 

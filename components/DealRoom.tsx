@@ -331,6 +331,10 @@ export default function DealRoom() {
       ? "blocked"
       : lineStatus === "no-deal"
         ? "walked"
+        : lineStatus === "declined"
+          ? "declined"
+          : lineStatus === "voided"
+            ? "released"
         : view.dealPrice !== null || view.booths.some((b) => b.state === "won")
           ? "deal"
           : view.transcript.length
