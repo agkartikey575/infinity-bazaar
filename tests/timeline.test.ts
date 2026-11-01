@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { catalog, missions } from "../src/engine/index.ts";
-import { buildMissionRun, buildSingleRun, buildSteps, deriveView, type Decision, type Run, type Step } from "../lib/timeline.ts";
+import { buildMissionRun, buildSingleRun, buildSteps, deriveView, stepDelay, type Decision, type Run, type Step } from "../lib/timeline.ts";
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
 const TERMINAL = new Set(["captured", "declined", "blocked", "no-deal", "voided"]);
@@ -137,5 +137,28 @@ test("timeline: held payments are captured only after delivery", () => {
     const cap = pp.findIndex((s) => s.effect === "captured");
     assert.ok(auth >= 0, `seed ${seed}: shipped item is authorized first`);
     if (cap >= 0) assert.ok(cap > auth && pp[cap].detail.includes("/authorizations/"), `seed ${seed}: capture follows the hold`);
+  }
+});
+
+test("a commentary line is held for reading only when another commentary line follows", () => {
+  const line = (text: string): Step => ({ type: "beat", line: 0, beat: { kind: "commentary", round: 1, text } });
+  const chat: Step = { type: "beat", line: 0, beat: { kind: "seller", round: 1, sellerId: "s1", move: "counter", price: 50, text: "Fifty, final." } };
+  const text = "Price war! Madame Vex goes to $53.";
+  assert.equal(stepDelay(line(text)), 1200, "no next step: short beat");
+  assert.equal(stepDelay(line(text), chat), 1200, "chat next: plays over the chat");
+  assert.equal(stepDelay(line(text), line("Next.")), Math.min(4500, Math.max(2200, 1600 + 32 * text.length)), "commentary next: reading time");
+});
+
+test("booth messages are numbered in arrival order and fees count in the all-in offer", () => {
+  for (const seed of SEEDS.slice(0, 10)) {
+    const run = buildMissionRun("hackathon-10-days", seed);
+    const { steps } = buildSteps(run, {});
+    const v = deriveView(run, steps, steps.length);
+    const seqs = v.booths.flatMap((b) => b.messages.map((m) => m.seq));
+    assert.equal(new Set(seqs).size, seqs.length, "every message has its own number");
+    for (const b of v.booths) {
+      assert.equal(b.lastSeq, b.messages.at(-1)?.seq ?? 0);
+      if (b.offer !== null) assert.ok(b.offerAllIn !== null && b.offerAllIn >= b.offer);
+    }
   }
 });

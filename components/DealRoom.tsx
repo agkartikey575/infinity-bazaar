@@ -54,7 +54,7 @@ function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
       <div className="receipt-head">
         <span className="label">{run.kind === "mission" ? "Mission receipt" : "Receipt"}</span>
         <b>
-          Paid {money(paid)} of {money(run.budgetUsd)} · saved {money(Math.max(0, saved))} against typical prices
+          Paid {money(paid)} of {money(run.budgetUsd)} · {paid > 0 ? `saved ${money(Math.max(0, saved))} against typical prices` : "nothing spent"}
         </b>
       </div>
       <div className="tbl">
@@ -193,7 +193,7 @@ export default function DealRoom() {
   useEffect(() => {
     if (!playing || cursor >= steps.length || (gate && !gate.ready)) return;
     const last = steps[cursor - 1];
-    const t = setTimeout(() => setCursor((c) => c + 1), last ? stepDelay(last) / speed : 300);
+    const t = setTimeout(() => setCursor((c) => c + 1), last ? stepDelay(last, steps[cursor]) / speed : 300);
     return () => clearTimeout(t);
   }, [playing, cursor, steps, speed, gate?.ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -323,7 +323,7 @@ export default function DealRoom() {
   // Before the first step, seat the sellers at their opening asks so the arena never starts empty.
   const booths = view.booths.length
     ? view.booths
-    : (deal?.sellers ?? []).map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open" as const, offer: null, fee: null, offerSeq: 0, askSeq: 0, messages: [] }));
+    : (deal?.sellers ?? []).map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open" as const, offer: null, fee: null, feeNow: false, offerAllIn: null, lastSeq: 0, offerSeq: 0, askSeq: 0, messages: [] }));
   const floors = booths.map((b) => (view.revealFloors ? deal?.sellers.find((s) => s.id === b.id)?.floor ?? null : null));
   const lineStatus = view.statuses[view.line];
   const arenaState =
@@ -354,7 +354,7 @@ export default function DealRoom() {
         </div>
         <div className="controls">
           <label className="field">
-            <span className="label">Mission</span>
+            <span className="label">What to buy</span>
             <select id="selection" value={rogue ? "" : selection} onChange={(e) => restart({ selection: e.target.value, seed })}>
               {rogue && <option value="">Stress test: agent goes rogue</option>}
               <optgroup label="Missions">
@@ -430,7 +430,7 @@ export default function DealRoom() {
                     restart({ seed, rogue });
                   }}
                 />
-                Real PayPal (sandbox)
+                PayPal sandbox (test money)
               </label>
               {live.walletError && <span className="note">{live.walletError}</span>}
               {live.enabled &&
@@ -522,6 +522,8 @@ export default function DealRoom() {
             span={span}
             floors={floors}
             agentOffer={view.agentOffer}
+            dealPrice={view.dealPrice ?? (arenaState === "deal" || arenaState === "blocked" ? deal?.outcome.amountToPay ?? null : null)}
+            dealSellerId={view.dealSellerId}
             target={view.plan?.target ?? null}
             walkAway={view.plan?.walkAway ?? null}
             state={arenaState}

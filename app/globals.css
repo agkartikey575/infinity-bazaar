@@ -146,6 +146,8 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 
 .log { padding: 12px; display: flex; flex-direction: column; gap: 10px; height: 360px; overflow-y: auto; overscroll-behavior: contain; }
 .log:focus-visible { outline: 3px solid var(--brass); outline-offset: -3px; }
+.log .sys { align-self: center; margin: 4px 0 0; padding: 4px 12px; border-radius: 999px; background: var(--sunk); border: 1px dashed var(--line);
+  font: 600 12px var(--body); color: var(--muted); text-align: center; }
 .log .quiet { margin: auto 0; text-align: center; font-size: 13px; color: var(--muted); font-style: italic; }
 .msg { display: flex; flex-direction: column; gap: 3px; max-width: 90%; animation: pop 0.3s ease both; }
 .msg .who { font: 600 10px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
@@ -163,22 +165,23 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .bfoot { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); background: var(--sunk); }
 .floor { font: 600 12px var(--mono); color: var(--muted); }
 
-/* Gap bar: the agent's offer from the left, the seller's ask from the right. */
-.gapbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
+/* Gap bar: the agent's offer from the left, the seller's ask from the right; the label sits above. */
+.gapbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: ". label ." "you bar ask"; gap: 4px 8px; align-items: center;
+  font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
+.g-label { grid-area: label; justify-self: center; max-width: 100%; padding: 1px 8px; border-radius: 999px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g-end { white-space: nowrap; }
-.g-end.you { color: var(--ink); } .g-end.ask { color: var(--brass); }
-.g-bar { position: relative; height: 24px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.g-end.you { grid-area: you; color: var(--ink); } .g-end.ask { grid-area: ask; color: var(--brass); }
+.g-bar { grid-area: bar; position: relative; height: 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
 .g-bar i { position: absolute; top: 0; bottom: 0; width: 50%; transition: transform 0.7s cubic-bezier(0.3, 0.7, 0.2, 1); }
 .g-agent { left: 0; background: var(--ink); transform-origin: left; }
 .g-seller { right: 0; background: var(--brass); transform-origin: right; }
-.g-bar b { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 1px 8px; border-radius: 999px;
-  background: var(--surface); color: var(--fg); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.gapbar.close .g-bar b { color: var(--brass); }
+.gapbar.close .g-label { color: var(--brass); }
 .gapbar.met .g-bar i, .gapbar.won .g-bar i { background: var(--teal); }
-.gapbar.met .g-bar b, .gapbar.won .g-bar b { background: var(--teal); color: var(--on-accent); animation: snap 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.gapbar.met .g-label, .gapbar.won .g-label { background: var(--teal); color: var(--on-accent); animation: snap 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 .gapbar.blocked .g-bar i, .gapbar.over .g-bar i { background: var(--rose); }
-.gapbar.blocked .g-bar b, .gapbar.over .g-bar b { background: var(--rose); color: var(--on-accent); animation: snap 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
-@keyframes snap { from { transform: translate(-50%, -50%) scale(1.4); } }
+.gapbar.blocked .g-label, .gapbar.over .g-label { background: var(--rose); color: var(--on-accent); animation: snap 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.gapbar.out .g-label { color: var(--muted); }
+@keyframes snap { from { transform: scale(1.3); } }
 
 /* Commentator: broadcast lower third. */
 .caption { --band: #1b1d33; position: relative; z-index: 1; margin: 16px -18px 0; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;

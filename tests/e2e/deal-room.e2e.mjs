@@ -4,7 +4,7 @@
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 
-import { buildMissionRun, buildSteps, deriveView } from "../../lib/timeline.ts";
+import { buildMissionRun, buildSingleRun, buildSteps, deriveView } from "../../lib/timeline.ts";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -200,15 +200,63 @@ await check("1440px: all three booths show a one-on-one chat after Skip", { widt
   assert.ok(sides.every(([who, a]) => (who === "agent" ? a === "flex-end" : a === "flex-start")), "agent on the right, seller on the left");
 });
 
-await check("390px: booth tabs show one booth at a time", { width: 390, height: 844 }, async (page) => {
+await check("390px: booth tabs are tabs and show one booth at a time", { width: 390, height: 844 }, async (page) => {
   await skip(page);
-  const tabs = page.locator(".tabs .tab");
+  const tabs = page.getByRole("tab");
   assert.equal(await tabs.count(), 3, "three booth tabs");
+  assert.equal(await page.getByRole("tablist").count(), 1, "tabs sit in a tablist");
   assert.equal(await page.locator(".booth:visible").count(), 1, "one booth visible");
+  assert.equal(await page.getByRole("tabpanel").count(), 1, "only the shown booth is an exposed tab panel");
   await tabs.nth(2).click();
-  assert.equal(await tabs.nth(2).getAttribute("aria-pressed"), "true");
+  assert.equal(await tabs.nth(2).getAttribute("aria-selected"), "true");
   const shown = await page.locator(".booth:visible").getAttribute("id");
   assert.equal(shown, await tabs.nth(2).getAttribute("aria-controls"), "tapped tab shows its booth");
+  await page.keyboard.press("ArrowRight");
+  assert.equal(await tabs.nth(0).getAttribute("aria-selected"), "true", "ArrowRight wraps to the first tab and selects it");
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("role")), "tab", "focus follows the arrow keys");
+  assert.equal(await page.locator(".booth:visible").getAttribute("id"), await tabs.nth(0).getAttribute("aria-controls"));
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(await tabs.nth(2).getAttribute("aria-selected"), "true", "ArrowLeft moves back");
+  const live = await page.$$eval(".booth .log", (els) => els.map((e) => [e.offsetParent !== null, e.getAttribute("aria-live")]));
+  assert.ok(live.every(([visible, mode]) => (visible ? mode === "polite" : mode === "off")), `only the visible chat is live: ${JSON.stringify(live)}`);
+});
+
+await check("390px: after Skip the visible booth is the seller the deal went to", { width: 390, height: 844 }, async (page) => {
+  let checked = 0;
+  for (const id of ["stickers", "energy-drinks", "portable-monitor", "logo-designer", "video-editor", "ai-credits", "font-license", "hosting-starter", "usb-mic"]) {
+    const o = buildSingleRun(id, 42).lines[0].deal.outcome;
+    if (o.status !== "deal") continue;
+    await page.selectOption("#selection", `item:${id}`);
+    await skip(page);
+    assert.equal(await page.locator(".booth:visible").getAttribute("id"), `booth-${o.sellerId}`, `${id}: shows ${o.sellerName}`);
+    if (await page.getByRole("dialog").count()) await btn(page, "Decline").click();
+    checked++;
+  }
+  assert.ok(checked >= 3, `checked enough items: ${checked}`);
+  await btn(page, /rogue/i).click();
+  await skip(page);
+  const rogue = buildSingleRun("usb-mic", 42, true).lines[0].deal.outcome;
+  assert.equal(await page.locator(".booth:visible").getAttribute("id"), `booth-${rogue.sellerId}`, `rogue: shows the blocked seller ${rogue.sellerName}`);
+  assert.match(await page.locator(".booth:visible").innerText(), /Blocked/);
+});
+
+await check("1440px: losing sellers get a closing note and fees count in the gap", { width: 1440, height: 900 }, async (page) => {
+  await btn(page, /rogue/i).click();
+  await skip(page);
+  const notes = await page.locator(".booth .sys").allTextContents();
+  assert.equal(notes.length, 2, "both losing sellers get a note");
+  for (const n of notes) assert.match(n, /Out of the running — your agent went with /);
+  assert.match(await page.locator(".receipt").innerText(), /nothing spent/);
+  assert.doesNotMatch(await page.locator(".receipt").innerText(), /saved \$0/);
+  // A seller's checkout fee is part of the ask the agent compares against.
+  await page.selectOption("#selection", "item:usb-mic");
+  await skip(page);
+  const run = buildSingleRun("usb-mic", 42);
+  const v = deriveView(run, buildSteps(run, {}).steps, Infinity);
+  const feeBooth = v.booths.find((b) => b.fee !== null && b.feeNow);
+  assert.ok(feeBooth, "table 42 has a seller with a checkout fee");
+  const ask = await page.locator(`#booth-${feeBooth.id} .g-end.ask`).innerText();
+  assert.equal(ask.replace(/\s+/g, " "), `Ask $${feeBooth.price + feeBooth.fee} incl. fee`);
 });
 
 await check("pause stops playback", { width: 1440, height: 900 }, async (page) => {

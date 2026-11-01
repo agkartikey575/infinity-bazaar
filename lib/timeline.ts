@@ -189,6 +189,12 @@ export interface BoothView {
   offer: number | null;
   /** A fee this seller revealed, added on top of the price. */
   fee: number | null;
+  /** True when that fee is charged at checkout (so it counts in the all-in price). */
+  feeNow: boolean;
+  /** What the agent's latest offer comes to all in, counting a fee it already knew about. */
+  offerAllIn: number | null;
+  /** Sequence number of this booth's newest message, 0 when empty. */
+  lastSeq: number;
   /** Counts of priced moves, so the screen can animate each one once. */
   offerSeq: number;
   askSeq: number;
@@ -196,6 +202,8 @@ export interface BoothView {
 }
 
 export interface Message {
+  /** Arrival order across all booths of the current item. */
+  seq: number;
   from: "agent" | "seller";
   text: string;
   tag?: string;
@@ -203,7 +211,7 @@ export interface Message {
 }
 
 /** One entry of the whole conversation, in the order it happened. */
-export interface TranscriptEntry extends Message {
+export interface TranscriptEntry extends Omit<Message, "seq"> {
   /** Seller names the agent spoke to, or the seller who spoke. */
   names: string[];
   sellerIndex: number | null;
@@ -230,6 +238,8 @@ export interface View {
   transcript: TranscriptEntry[];
   /** The agent's latest priced move to any seller. */
   agentOffer: number | null;
+  /** The seller the agent agreed with, once it has. */
+  dealSellerId: string | null;
   guard: GuardDecision | null;
   statuses: LineStatus[];
   amounts: (number | null)[];
@@ -272,6 +282,8 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
   let guard: GuardDecision | null = null;
   let offerIndex = 0;
   let dealPrice: number | null = null;
+  let dealSellerId: string | null = null;
+  let seq = 0;
   let revealFloors = false;
 
   const say = (t: string) => (commentary = [t, ...commentary].slice(0, 3));
@@ -282,7 +294,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     switch (step.type) {
       case "line-start": {
         line = step.line;
-        booths = ln.deal.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open", offer: null, fee: null, offerSeq: 0, askSeq: 0, messages: [] }));
+        booths = ln.deal.sellers.map((s) => ({ id: s.id, name: s.name, archetype: s.archetype, price: s.openAsk, state: "open", offer: null, fee: null, feeNow: false, offerAllIn: null, lastSeq: 0, offerSeq: 0, askSeq: 0, messages: [] }));
         commentary = [];
         transcript = [];
         agentOffer = null;
@@ -291,6 +303,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         guard = null;
         offerIndex = 0;
         dealPrice = null;
+        dealSellerId = null;
         revealFloors = false;
         statuses[step.line] = "negotiating";
         break;
@@ -302,9 +315,11 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
           for (const id of b.to) {
             const booth = booths.find((x) => x.id === id);
             if (!booth) continue;
-            booth.messages.push({ from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
+            booth.messages.push({ seq: ++seq, from: "agent", text: b.text, tag: AGENT_TAG[b.move], tagKind: "move" });
+            booth.lastSeq = seq;
             if (priced) {
               booth.offer = b.price!;
+              booth.offerAllIn = b.price! + (booth.feeNow && booth.fee ? booth.fee : 0);
               booth.offerSeq++;
             }
           }
@@ -322,6 +337,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
             if (idx >= 0) offerIndex = idx;
           }
           if (b.move === "accept") dealPrice = o.amountToPay ?? b.price ?? null;
+          if (b.move === "accept" || b.move === "accept-upsell") dealSellerId = b.to[0] ?? null;
           if (b.move === "decline" || b.move === "priced-out" || b.move === "reject-fee") for (const id of b.to) {
             const booth = booths.find((x) => x.id === id);
             if (booth) booth.state = "out";
@@ -329,13 +345,19 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         } else if (b.kind === "seller") {
           const booth = booths.find((x) => x.id === b.sellerId);
           if (booth) {
-            booth.messages.push({ from: "seller", text: b.text });
+            booth.messages.push({ seq: ++seq, from: "seller", text: b.text });
+            booth.lastSeq = seq;
             transcript.push({ from: "seller", text: b.text, names: [booth.name], sellerIndex: booths.indexOf(booth) });
             if (b.price !== undefined && (b.move === "counter" || b.move === "final" || b.move === "accept" || b.move === "absorb-fee")) {
               if (b.price !== booth.price) booth.askSeq++;
               booth.price = b.price;
             }
-            if (b.price !== undefined && (b.move === "reveal-fee" || b.move === "surprise-fee")) booth.fee = b.price;
+            if (b.price !== undefined && (b.move === "reveal-fee" || b.move === "surprise-fee")) {
+              booth.fee = b.price;
+              // Beats carry only the amount; the item's fee list says whether it is due at checkout.
+              const fees = getItem(ln.itemId).hiddenFees.filter((f) => f.valueUsd === b.price);
+              booth.feeNow = fees.length ? fees.some((f) => f.payNow) : true;
+            }
             if (b.move === "exit") booth.state = "out";
           }
         } else if (b.kind === "detect") {
@@ -344,7 +366,10 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
           if (last && last.from === "seller" && !last.tag) {
             last.tag = b.text;
             last.tagKind = "detect";
-          } else booth?.messages.push({ from: "seller", text: "", tag: b.text, tagKind: "detect" });
+          } else if (booth) {
+            booth.messages.push({ seq: ++seq, from: "seller", text: "", tag: b.text, tagKind: "detect" });
+            booth.lastSeq = seq;
+          }
           const lastT = transcript.at(-1);
           if (booth && lastT && lastT.from === "seller" && lastT.names[0] === booth.name && !lastT.tag) {
             lastT.tag = b.text;
@@ -421,6 +446,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
     plan: run.lines[line]?.deal.plan ?? null,
     offerIndex,
     dealPrice,
+    dealSellerId,
     booths,
     commentary,
     event,
@@ -438,7 +464,7 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
 }
 
 /** How long to dwell on a step at 1x speed, in milliseconds. */
-export function stepDelay(step: Step): number {
+export function stepDelay(step: Step, next?: Step): number {
   switch (step.type) {
     case "line-start":
       return 400;
@@ -447,7 +473,8 @@ export function stepDelay(step: Step): number {
       const b = step.beat;
       // Commentary plays over the chat: the bar keeps the line (and the one before it)
       // on screen while the next messages arrive, so it needs only a short beat of its own.
-      if (b.kind === "commentary") return 1200;
+      // Two commentary lines in a row: hold the first long enough to read it.
+      if (b.kind === "commentary") return next?.type === "beat" && next.beat.kind === "commentary" ? clamp(1600 + 32 * b.text.length, 2200, 4500) : 1200;
       if (b.kind === "detect") return 900;
       if (b.kind === "event") return 1600;
       return clamp(1100 + 34 * b.text.length, 1600, 4400);
