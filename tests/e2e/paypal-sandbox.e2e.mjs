@@ -106,7 +106,9 @@ async function scenario(name, want, expectPill, expectPayPal) {
     assert.ok(orderId, "order id shown in the PayPal details");
     const order = await paypalOrder(orderId);
     const payments = order.purchase_units?.[0]?.payments ?? {};
-    const status = payments.captures?.[0]?.status ?? payments.authorizations?.[0]?.status;
+    // A held payment reports its authorization (CAPTURED or VOIDED); an immediate one reports its capture.
+    const status = payments.authorizations?.[0]?.status ?? payments.captures?.[0]?.status;
+    if (payments.authorizations?.[0]?.status === "CAPTURED") assert.equal(payments.captures?.[0]?.status, "COMPLETED", "capture on delivery completed");
     assert.equal(order.status, "COMPLETED", "PayPal order completed");
     assert.match(status, expectPayPal, `PayPal payment status (${status})`);
     assert.equal(order.purchase_units[0].amount.value, t.amount.toFixed(2), "PayPal charged the agreed amount");
