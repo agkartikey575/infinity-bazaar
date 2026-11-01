@@ -75,6 +75,7 @@ let failures = 0;
 
 async function scenario(name, want, expectPill, expectPayPal) {
   const t = findTable(want);
+  let orderId;
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await ctx.newPage();
   try {
@@ -102,7 +103,7 @@ async function scenario(name, want, expectPill, expectPayPal) {
 
     await page.getByLabel("Show PayPal details").check();
     const panel = await page.locator(".checkout").innerText();
-    const orderId = panel.match(/order ([A-Z0-9]{17})/)?.[1];
+    orderId = panel.match(/order ([A-Z0-9]{17})/)?.[1];
     assert.ok(orderId, "order id shown in the PayPal details");
     const order = await paypalOrder(orderId);
     const payments = order.purchase_units?.[0]?.payments ?? {};
@@ -116,7 +117,7 @@ async function scenario(name, want, expectPill, expectPayPal) {
   } catch (e) {
     failures++;
     await page.screenshot({ path: `/tmp/paypal-${want}.png`, fullPage: true }).catch(() => undefined);
-    console.log(`not ok - ${name}\n  ${String(e.message).split("\n").join("\n  ")}`);
+    console.log(`not ok - ${name}${orderId ? ` (order ${orderId})` : ""}\n  ${String(e.message).split("\n").join("\n  ")}`);
   } finally {
     await ctx.close();
   }
