@@ -53,6 +53,10 @@ These purchases were made on the live site through PayPal's checkout window, app
 | Web font license (digital) | $36.00 | `6NL44467DN736822G` | Capture COMPLETED |
 | USB microphone, delivered | $43.00 | `5S816938611020847` | Authorization CAPTURED on delivery |
 | USB microphone, delivery failed | $43.00 | `14R5643610878250W` | Authorization VOIDED, nothing charged |
+| Font license paid from a connected wallet (no PayPal window) | $36.00 | `62U44338A4536814D` | Capture COMPLETED (Vault) |
+| Buyer pressed Cancel in PayPal | $36.00 | `4TP06960GM1183607` | Never approved, nothing charged |
+
+A full 3-item mission with one "ask you" approval was also paid end to end. PayPal's captured total matched the receipt ($71).
 
 ## How a mission works
 
