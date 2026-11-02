@@ -1,87 +1,134 @@
 # Infinity Bazaar ∞
 
-Give an AI agent a goal and a budget. It picks what to buy from a catalog, negotiates with three AI sellers at once, plays them against each other, and pays through PayPal. **AgentGuard**, plain code rather than AI, checks every payment against the rules you set before any money can move.
+**Your AI haggles. Your rules guard the money.**
+
+Give an AI shopping agent a goal and a budget. It picks what to buy, haggles with three AI sellers at once, catches their tricks, and pays through **real PayPal**. Before any money moves, **AgentGuard** checks every payment against your rules. AgentGuard is plain code, so a smooth-talking seller can't argue its way past it.
+
+**Live demo:** https://infinity-bazaar.vercel.app
 
 Built for the PayPal AI Hackathon 2026.
 
-## Run it
+## Try it in two minutes
 
-Requires Node.js 22.18 or newer. No API keys are needed for the current version.
+1. Press **Play**. Your agent haggles with three sellers side by side, in one-on-one chats you can read, while a live commentator calls the tactics.
+2. Type **1** or **7** in **Table** and press Enter. A purchase goes over your $100 approval line, so the agent stops and asks you first.
+3. Press **Agent goes rogue**. A pushy seller talks the agent into a $140 bundle on a $70 limit. The agent says yes; AgentGuard says no. **Nothing is sent to PayPal.**
+4. Switch on **PayPal sandbox (test money)** and play **Web font license** or **USB microphone**. A real PayPal window opens. Approve with a sandbox buyer account, then tick **Show PayPal details** to see the real order id.
 
-```bash
-npm install
-npm run dev           # deal room at http://localhost:3000
-```
+Every table is seeded: **the same table number always replays the same deal**.
 
-```bash
-npm run demo          # a full "hackathon in 10 days, $300" mission in the terminal
-npm run demo:rogue    # the agent falls for an upsell; AgentGuard blocks it
-npm test              # engine, negotiation-quality and playback tests
-npm run e2e           # real-browser checks (needs Playwright and `npx next start -p 3100` running)
-```
+## What makes it different
+
+- **Real negotiation, not a script.** Each seller has a hidden lowest price, a personality and its own tricks, such as fake deadlines, made-up rival buyers, hidden fees, teaser prices and upsells. The agent:
+  - anchors just under the market low
+  - knows its walk-away price
+  - raises its offer in shrinking steps
+  - plays sellers against each other
+  - asks about fees before agreeing
+  - compares the true cost, including fees now and later costs such as renewals
+  - trades for extras instead of paying more
+  - walks away when nobody meets its price
+- **The AI never has the final say on money.** AgentGuard answers **Approve**, **Ask you** or **Block** for every payment. It checks:
+  - the item limit and your total budget
+  - the agreed price and the seller
+  - surprise checkout fees and later costs
+  - your approval line and your safety reserve
+
+  It runs on screen, then again on the server just before PayPal.
+- **Pay on delivery for physical goods.**
+  - Digital items are charged straight away.
+  - Shipped goods and services are **held** with a PayPal authorization and **captured when delivered**.
+  - If delivery fails, the hold is **voided** and nothing is charged.
+- **Built to be trusted:**
+  - The browser can never choose an amount.
+  - A retry can never charge twice.
+  - An edited or replayed payment record can't sneak past the budget.
+
+## Proof: real PayPal sandbox payments
+
+These purchases were made on the live site through PayPal's checkout window, approved by a sandbox buyer, then read back from PayPal's API:
+
+| Purchase | Amount | PayPal order | PayPal's record |
+|---|---|---|---|
+| Web font license (digital) | $36.00 | `6NL44467DN736822G` | Capture COMPLETED |
+| USB microphone, delivered | $43.00 | `5S816938611020847` | Authorization CAPTURED on delivery |
+| USB microphone, delivery failed | $43.00 | `14R5643610878250W` | Authorization VOIDED, nothing charged |
 
 ## How a mission works
 
 ```mermaid
 flowchart LR
-  you[You: goal, budget, ask-me line] --> plan[Agent plans the shopping list]
-  plan --> deal1[Deal room: 3 sellers]
-  plan --> deal2[Deal room: 3 sellers]
-  plan --> deal3[Deal room: 3 sellers]
-  deal1 & deal2 & deal3 --> guard{AgentGuard}
+  you[You: goal, budget, approval line] --> plan[Agent plans the shopping list]
+  plan --> b[3 sellers per item, haggling in parallel]
+  b --> guard{AgentGuard}
   guard -- approve --> pp[PayPal]
   guard -- ask you --> ok[You approve or decline] --> pp
-  guard -- block --> stop[No PayPal call]
-  pp --> receipt[Receipt and savings]
+  guard -- block --> stop[Nothing sent to PayPal]
+  pp -- digital --> cap[Charged now]
+  pp -- shipped --> hold[Held] --> d{Delivered?}
+  d -- yes --> paid[Captured]
+  d -- no --> void[Hold released]
 ```
 
-1. **Plan.** Each mission comes with a shopping list from the catalog and a cap for each item.
-2. **Negotiate.** For each item, three randomized sellers with hidden lowest prices and their own tactics negotiate in parallel. The agent:
-   - anchors just under the web low
-   - knows its walk-away price
-   - raises its offer in shrinking steps
-   - uses one seller's offer as leverage against the others
-   - checks for hidden fees and trades for extras instead of paying more
-   - flags tricks such as fake urgency
-3. **Guard.** AgentGuard checks the item cap, the total budget and the seller, and asks you before any payment above your ask-me line.
-4. **Pay.** Digital goods are paid immediately. Shipped goods and services are authorized now and captured on delivery (a PayPal authorization is honoured for 3 days and valid for up to 29). A failed delivery voids the hold, so no money moves.
+## How payments work
+
+The browser never sends a price. It only names the run (mission, table number, and a random id for each Play) and the line to pay. The server then:
+1. replays the deterministic engine and works out the amount itself;
+2. runs AgentGuard again;
+3. only then calls PayPal.
+
+| AgentGuard says | What happens at PayPal |
+|---|---|
+| Approve | Paid from your connected PayPal wallet (Vault v3) with no one present, or you approve it in a PayPal window |
+| Ask you | You approve in the deal room, then in PayPal |
+| Block | No call to PayPal at all |
+
+**PayPal APIs used:**
+- Orders v2 with CAPTURE for digital goods.
+- Orders v2 with AUTHORIZE for shipped goods, then capture on delivery or void if delivery fails.
+- Vault v3 setup and payment tokens for the connected wallet, charged with merchant-initiated stored credentials.
+
+**Safety details:**
+- **No double charges.** Each line has a stable `PayPal-Request-Id` and `invoice_id`, so a retry or double click returns the same order instead of paying twice.
+- **Recovery after a lost reply.** If PayPal already finished a step (already captured, already voided, duplicate invoice), the server reads PayPal's state and records it.
+- **Declined payments.** Declined funding sends the buyer back to PayPal. A declined saved wallet falls back to approval in a PayPal window.
+- **Payments under review.** These show as "Waiting for PayPal", never "Paid". A hold under review is never captured early.
+- **Timeouts and retries.** Every PayPal call times out after 10 seconds. It is retried once with the same request id, after a pause on a 429 or 5xx.
+- **Tamper-evident payment record.** The ledger travels with the browser, signed with an HMAC. The server counts every earlier purchase as spent unless the signed ledger proves no money moved, so an old or missing ledger can't hide spending.
+- **Strict payment routes.** They accept only same-site JSON. Errors shown in the browser are short and carry PayPal's debug id; details stay in the server log.
+
+## Run it
+
+Requires Node.js 22.18 or newer.
+
+```bash
+npm install
+npm run dev           # http://localhost:3000, demo mode with simulated payments
+```
+
+For real PayPal sandbox payments, copy `.env.example` to `.env.local` and fill in `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from a sandbox app linked to a **US** sandbox business account.
+
+```bash
+npm run demo          # a full "hackathon in 10 days, $300" mission in the terminal
+npm run demo:rogue    # the agent falls for an upsell; AgentGuard blocks it
+npm test              # engine, negotiation, playback and payment tests
+npm run e2e           # browser checks of the deal room (needs `npx next start -p 3100`)
+npm run e2e:paypal    # real PayPal sandbox purchases (needs a sandbox buyer login)
+```
+
+CI runs on every push. It checks the data and types, runs the unit tests, makes a production build, and plays the deal room in a real browser.
 
 ## What's in the repo
 
 | Path | What it is |
-| --- | --- |
-| `data/` | Catalog of 40 items, 10 seller personalities, 10 random events, 3 missions |
-| `src/engine/` | Negotiation engine, AgentGuard and mission runner: pure TypeScript and seeded, so any run replays exactly |
-| `lib/timeline.ts` | Turns engine results into the step-by-step playback the deal room shows |
-| `components/DealRoom.tsx`, `app/` | The Next.js deal room |
-| `tests/` | Engine, negotiation-quality and playback tests, plus a Playwright end-to-end script in `tests/e2e/` |
-
-## Status
-
-| Part | State |
-| --- | --- |
-| Catalog, negotiation engine, AgentGuard | Done, tested |
-| Deal room web app | Working; arena redesign in progress |
-| PayPal sandbox (Orders v2: capture, authorize, capture on delivery, void; Vault v3 wallet) | Working: real sandbox orders when keys are set, simulated otherwise |
-| AI voices for sellers | Planned. The engine decides every price; the AI only rewrites the wording |
-
-Catalog prices are hand-researched estimates (`confidence: "estimate"`), not live data.
-
-## How payments work
-
-The browser never sends a price. It names the run (mission, table number and a random id for each Play) and the line; the server replays the deterministic engine, computes the amount itself, runs AgentGuard, and only then calls PayPal.
-
-| AgentGuard says | What happens at PayPal |
-| --- | --- |
-| Approve | Paid from your connected PayPal wallet (Vault), with no one present. Without a wallet, you approve it in a PayPal window. |
-| Ask you | You approve in the deal room, then in the PayPal window. |
-| Block | No call to PayPal at all. |
-
-Digital items use intent CAPTURE. Shipped goods and services use intent AUTHORIZE: the money is held, captured when delivery is confirmed, or the hold is voided if delivery fails. PayPal's own capture and authorization statuses are checked; anything but success counts as declined.
-
-Every PayPal call carries a `PayPal-Request-Id` derived from the run's random id and the line, so a retry or double click returns the same order instead of paying twice, and two visitors never share ids.
-
-The payment ledger travels with the browser, signed by the server. It is tamper-evident: amounts, states and the run can't be changed. An older copy of the same run's ledger could be replayed, so the budget is enforced per run; per-line request ids still prevent paying any line twice. A production version would keep the ledger in a database.
+|---|---|
+| `data/` | 40 catalog items with researched prices and sources, 10 seller personalities, random events, 3 missions and the dialogue library |
+| `src/engine/` | Negotiation engine, AgentGuard and mission runner: pure, seeded TypeScript, so any run replays exactly |
+| `lib/timeline.ts` | Turns engine results into the step-by-step playback |
+| `lib/server/` | PayPal client, signed ledger, payment service and request checks |
+| `app/api/` | Payment routes (pay, complete, decline, deliver) and wallet connect |
+| `components/` | The deal room: arena, booths, AgentGuard gate, payment panel and receipt |
+| `tests/` | Unit tests, plus browser tests in `tests/e2e/` |
 
 ## License
 
