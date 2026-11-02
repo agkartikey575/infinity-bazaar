@@ -10,65 +10,11 @@
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 
-import { buildSingleRun } from "../../lib/timeline.ts";
-import { getItem } from "../../src/engine/index.ts";
+import { approveInPayPal, BASE_URL, findTable, paypalOrder, requireBuyer } from "./paypal-helpers.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
-
-const BASE_URL = process.env.BASE_URL ?? "http://localhost:3100";
-const EMAIL = process.env.PAYPAL_SANDBOX_BUYER_EMAIL;
-const PASSWORD = process.env.PAYPAL_SANDBOX_BUYER_PASSWORD;
-const API = process.env.PAYPAL_API_BASE ?? "https://api-m.sandbox.paypal.com";
-if (!EMAIL || !PASSWORD) {
-  console.log("skip - set PAYPAL_SANDBOX_BUYER_EMAIL and PAYPAL_SANDBOX_BUYER_PASSWORD to run the sandbox checks");
-  process.exit(0);
-}
-
-/** PayPal's record of an order, read with the app's own API keys. */
-async function paypalOrder(id) {
-  const basic = Buffer.from(`${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`).toString("base64");
-  const tok = await fetch(`${API}/v1/oauth2/token`, { method: "POST", headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" }, body: "grant_type=client_credentials" }).then((r) => r.json());
-  return fetch(`${API}/v2/checkout/orders/${id}`, { headers: { Authorization: `Bearer ${tok.access_token}` } }).then((r) => r.json());
-}
-
-/** A single-item table whose agreed price AgentGuard approves without asking, matching `want`. */
-function findTable(want) {
-  for (const item of ["font-license", "icon-set", "ui-template", "usb-mic", "usb-c-hub", "mic-arm", "pizza", "stickers", "webcam"]) {
-    let flow;
-    try {
-      flow = getItem(item).paypalFlow;
-    } catch {
-      continue;
-    }
-    for (let seed = 1; seed < 400; seed++) {
-      const run = buildSingleRun(item, seed, false);
-      const o = run.lines[0].deal.outcome;
-      if (o.status !== "deal" || o.amountToPay > run.askAboveUsd || o.surpriseFee || o.futureFee) continue;
-      if (want === "capture" && flow === "capture_now") return { item, seed, amount: o.amountToPay };
-      if (want === "delivered" && flow !== "capture_now" && o.afterPayment === null) return { item, seed, amount: o.amountToPay };
-      if (want === "failed" && flow !== "capture_now" && o.afterPayment !== null) return { item, seed, amount: o.amountToPay };
-    }
-  }
-  throw new Error(`no table for ${want}`);
-}
-
-/** Log in as the sandbox buyer and approve, in whatever order PayPal shows its screens. */
-async function approveInPayPal(popup) {
-  await popup.waitForLoadState("domcontentloaded");
-  const email = popup.locator("#email");
-  if (await email.isVisible({ timeout: 20_000 }).catch(() => false)) {
-    await email.fill(EMAIL);
-    const next = popup.locator("#btnNext");
-    if (await next.isVisible().catch(() => false)) await next.click();
-    await popup.locator("#password").fill(PASSWORD);
-    await popup.locator("#btnLogin").click();
-  }
-  const pay = popup.locator("#payment-submit-btn, button:has-text('Complete Purchase'), button:has-text('Pay Now'), button:has-text('Continue to Review Order'), button:has-text('Agree & Continue'), button:has-text('Continue')").first();
-  await pay.waitFor({ state: "visible", timeout: 45_000 });
-  await pay.click();
-  await popup.waitForEvent("close", { timeout: 45_000 }).catch(() => undefined);
-}
+requireBuyer();
 
 const browser = await chromium.launch();
 let failures = 0;
