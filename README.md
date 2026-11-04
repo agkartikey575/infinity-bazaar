@@ -43,7 +43,7 @@ Every table is seeded: **the same table number always replays the same deal**.
   - The browser can never choose an amount.
   - A retry can never charge twice.
   - An edited or replayed payment record can't sneak past the budget.
-- **Live AI voices, with the numbers locked.** With a Claude API key set, Claude rewrites the chat lines of each deal in character: the pushy upseller flatters, the stubborn veteran grumbles, the commentator calls it like a sports match. The engine still decides every price, move and outcome. Each rewritten line must keep exactly the dollar amounts of the original and add none, checked in code; any line that fails, and any slow or failed call, plays the original text instead. "Show original lines" switches back at any time.
+- **Live AI voices, with the numbers locked.** With a Claude API key set, Claude rewrites the chat lines of each deal in character: the pushy upseller flatters, the stubborn veteran grumbles, the commentator calls it like a sports match. The engine still decides every price, move and outcome. A check in code accepts a rewritten line only if its dollar amounts and percentages are exactly the original's, written the same way and in the same order, and it adds no other number, no unit after an amount (such as "k" or "per month") and no number spelled out in words. Any line that fails, and any slow or failed call, plays the original text instead. "Show original lines" switches back at any time.
 
 ## Proof: real PayPal sandbox payments
 

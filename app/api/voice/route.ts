@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { checkOrigin, HttpError } from "../../../lib/server/request.ts";
+import { checkOrigin, clientIp, HttpError } from "../../../lib/server/request.ts";
 import { rebuild, voiceEnabled, voiceLine, type VoiceKind } from "../../../lib/server/voice.ts";
 
 export const runtime = "nodejs";
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     }
     if (line >= lines) throw new HttpError(400, "Invalid line.");
 
-    const r = await voiceLine(kind, run.id, seed, kind === "rogue", line);
+    const r = await voiceLine(kind, run.id, seed, kind === "rogue", line, { client: clientIp(req), signal: req.signal });
     return NextResponse.json({ enabled: true, texts: r.texts, model: r.model, ms: r.ms });
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });

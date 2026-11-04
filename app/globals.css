@@ -198,6 +198,7 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .ai-badge { margin-left: auto; font: 600 11px var(--mono); letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px;
   border: 1px solid rgba(244, 245, 255, 0.28); color: rgba(244, 245, 255, 0.8); white-space: nowrap; }
 .voice-toggle { font-size: 12px; color: var(--muted); }
+.voice-toggle:has(input:disabled) { opacity: 0.55; }
 
 /* AgentGuard gate → PayPal. */
 .pipeline { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; padding: 18px; border-bottom: 1px solid var(--line); background: var(--sunk); }

@@ -2,8 +2,9 @@
 // fallback path. The Claude client is a fake; no test calls the real API.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import Anthropic from "@anthropic-ai/sdk";
 import { buildMissionRun } from "../lib/timeline.ts";
-import { acceptLine, amountsIn, buildRequest, cacheKey, createVoicer, DailyBudget, keepsNumbers, Lru, readResponse, voiceInput, type VoiceClient } from "../lib/server/voice.ts";
+import { acceptLine, amountsIn, buildRequest, cacheKey, ClientLimit, createVoicer, DailyBudget, keepsNumbers, Lru, readResponse, voiceInput, type VoiceClient } from "../lib/server/voice.ts";
 
 test("number lock: keeps every dollar amount and adds none", () => {
   assert.equal(keepsNumbers("We can do $53! Super competitive, right?", "$53, and honestly that's a steal."), true);
@@ -19,10 +20,40 @@ test("number lock: keeps every dollar amount and adds none", () => {
   assert.equal(keepsNumbers("Save 10% today at $45.", "Today only: $45."), false);
   assert.equal(keepsNumbers("Any fees on top?", "Any fees on top? Like 5 bucks?"), false);
   assert.equal(keepsNumbers("Any fees on top?", "Anything extra at checkout?"), true);
-  // Formatting differences of the same amount are equal.
-  assert.equal(keepsNumbers("That comes to $1,200.", "All in, $1200."), true);
-  assert.equal(keepsNumbers("That is $12.50 extra.", "It adds $12.5."), true);
-  assert.deepEqual(amountsIn("Pay $1,200.00 or 15%."), { dollars: ["1200"], percents: ["15"], numbers: ["1200", "15"] });
+  // Amounts must be written exactly as in the original.
+  assert.equal(keepsNumbers("That comes to $1,200.", "All in, $1,200."), true);
+  assert.equal(keepsNumbers("That comes to $1,200.", "All in, $1200."), false);
+  assert.equal(keepsNumbers("That is $12.50 extra.", "It adds $12.50."), true);
+  assert.equal(keepsNumbers("That is $12.50 extra.", "It adds $12.5."), false);
+  assert.deepEqual(amountsIn("Pay $1,200.00 or 15%."), { dollars: ["1,200.00"], percents: ["15"], numbers: ["1,200.00", "15"] });
+});
+
+test("number lock: order, units, words, digits and commas", () => {
+  const o = "Counter at $53.";
+  assert.equal(acceptLine(o, "My counter is $53, take it or leave it."), true);
+  // Units that change the size or the period of the amount.
+  for (const bad of ["Counter at $53k.", "Counter at $53K.", "Counter at $53 million.", "Counter at $53 per month.", "Counter at $53/mo.", "Counter at $53 / month.", "Counter at $53 bn.", "Counter at $53 grand.", "Counter at $53 a year."]) {
+    assert.equal(acceptLine(o, bad), false, bad);
+  }
+  // A word that merely starts with a unit letter is fine.
+  assert.equal(acceptLine(o, "Counter at $53, more or less final."), true);
+  // A unit the original already had may stay.
+  assert.equal(acceptLine("Renewal is $14/mo after the first year.", "After the first year, renewal runs $14/mo."), true);
+  // Commas must be real thousands groups.
+  assert.equal(acceptLine(o, "Counter at $5,3."), false);
+  assert.equal(acceptLine("Total $1,200.", "All in: $1,2000."), false);
+  // Spelled-out numbers and shares, unless the original says them.
+  for (const bad of ["Counter at $53, that's fifty percent off.", "Counter at $53, half off.", "Counter at $53, double the value.", "Counter at $53, twice as good.", "Counter at $53, one day only.", "Counter at $53, a quarter less.", "Counter at $53, a dozen extras.", "Counter at $53, ten per cent off."]) {
+    assert.equal(acceptLine(o, bad), false, bad);
+  }
+  assert.equal(acceptLine("This one is $53.", "For this one, $53."), true);
+  // Non-ASCII digits.
+  assert.equal(acceptLine(o, "Counter at $53, that's ５０% off."), false);
+  assert.equal(acceptLine(o, "Counter at $٥٣."), false);
+  // Order counts: swapping two amounts changes who said what.
+  assert.equal(acceptLine("I offered $45, you said $60.", "I offered $60, you said $45."), false);
+  assert.equal(acceptLine("I offered $45, you said $60.", "My offer was $45 and yours was $60."), true);
+  assert.equal(acceptLine("Save 10% or 20% today.", "Today: 20% or 10% off."), false);
 });
 
 test("acceptLine rejects empty, multi-line, emoji and overlong text", () => {
@@ -54,7 +85,7 @@ test("request: structured output, low effort, cached system prompt, fallbacks ex
   const r = buildRequest("claude-opus-5-5", input);
   assert.equal(r.output_config.effort, "low");
   assert.equal(r.output_config.format.type, "json_schema");
-  assert.equal(r.max_tokens, 4000);
+  assert.equal(r.max_tokens, 8000);
   assert.deepEqual(r.system[0].cache_control, { type: "ephemeral" });
   assert.equal("thinking" in r, false);
   assert.deepEqual((r as { betas?: string[] }).betas, ["server-side-fallback-2026-07-01"]);
@@ -122,7 +153,10 @@ test("cache: keyed by kind, id, seed, rogue and line; repeat calls are free", as
   // Different seed or line: a new call.
   await v.voiceLine("mission", "hackathon-10-days", 43, false, 0);
   assert.equal(calls.length, 3);
-  assert.deepEqual(calls[0].options, { timeout: 20_000, maxRetries: 1 });
+  const opt = calls[0].options as { timeout: number; maxRetries: number; signal: AbortSignal };
+  assert.equal(opt.timeout, 20_000);
+  assert.equal(opt.maxRetries, 0);
+  assert.ok(opt.signal instanceof AbortSignal);
 });
 
 test("LRU drops the least recently used entry", () => {
@@ -169,4 +203,115 @@ test("errors, refusals and no client all fall back to the original lines", async
   reply = { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ lines: [] }) }] };
   assert.deepEqual((await v.voiceLine("rogue", "usb-mic", 7, true, 0)).texts, {});
   assert.equal(calls.length, 3);
+});
+
+test("after a server-side fallback, the text after the last switch point is read", () => {
+  const refused = { type: "text", text: JSON.stringify({ lines: good.map((g) => ({ i: g.i, text: `Refused ${g.text}` })) }) };
+  const res = {
+    stop_reason: "end_turn",
+    content: [refused, { type: "fallback" }, { type: "thinking" }, { type: "text", text: JSON.stringify({ lines: good }) }],
+  };
+  const texts = readResponse(res, input);
+  assert.equal(texts[good[0].i], good[0].text);
+});
+
+test("per-client limit: a sliding 24-hour window per IP; cache hits are free", async () => {
+  let now = Date.parse("2026-11-04T10:00:00Z");
+  const l = new ClientLimit(2, () => now);
+  assert.equal(l.take("1.2.3.4"), true);
+  now += 60_000;
+  assert.equal(l.take("1.2.3.4"), true);
+  assert.equal(l.take("1.2.3.4"), false);
+  assert.equal(l.take("5.6.7.8"), true);
+  // The first call leaves the window 24 hours after it was made.
+  now += 24 * 60 * 60 * 1000 - 30_000;
+  assert.equal(l.take("1.2.3.4"), true);
+  assert.equal(l.take("1.2.3.4"), false);
+
+  const { client, calls } = fakeClient(() => answer(good));
+  const v = createVoicer({ client, perClientLimit: 1, log: () => {} });
+  const a = { client: "1.2.3.4" };
+  assert.ok(Object.keys((await v.voiceLine("mission", "hackathon-10-days", 42, false, 0, a)).texts).length);
+  assert.deepEqual((await v.voiceLine("mission", "hackathon-10-days", 42, false, 1, a)).texts, {});
+  assert.ok(Object.keys((await v.voiceLine("mission", "hackathon-10-days", 42, false, 0, a)).texts).length, "cache hit over the limit");
+  assert.ok(Object.keys((await v.voiceLine("mission", "hackathon-10-days", 42, false, 1, { client: "5.6.7.8" })).texts).length);
+  assert.equal(calls.length, 2);
+});
+
+test("budget counts every attempt: one retry on connection errors, none on others", async () => {
+  const { client, calls } = fakeClient(() => new Anthropic.APIConnectionError({ message: "down" }));
+  const v = createVoicer({ client, dailyLimit: 3, retryDelayMs: 0, log: () => {} });
+  assert.deepEqual((await v.voiceLine("mission", "hackathon-10-days", 42, false, 0)).texts, {});
+  assert.equal(calls.length, 2);
+  assert.equal(v.budget.remaining, 1);
+  // Only one attempt is left, so there is no retry.
+  await v.voiceLine("mission", "hackathon-10-days", 42, false, 1);
+  assert.equal(calls.length, 3);
+  assert.equal(v.budget.remaining, 0);
+  // Over the cap: no call at all.
+  await v.voiceLine("mission", "hackathon-10-days", 42, false, 2);
+  assert.equal(calls.length, 3);
+
+  const plain = fakeClient(() => new Error("bad"));
+  const w = createVoicer({ client: plain.client, retryDelayMs: 0, log: () => {} });
+  await w.voiceLine("mission", "hackathon-10-days", 42, false, 0);
+  assert.equal(plain.calls.length, 1);
+});
+
+/** A client whose calls wait until released, or until their signal aborts. */
+function slowClient() {
+  const seen: AbortSignal[] = [];
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  const client: VoiceClient = {
+    beta: {
+      messages: {
+        create: (_body: never, options?: { signal?: AbortSignal }) =>
+          new Promise((resolve, reject) => {
+            const signal = options!.signal!;
+            seen.push(signal);
+            signal.addEventListener("abort", () => reject(new Anthropic.APIUserAbortError()), { once: true });
+            gate.then(() => resolve(answer(good)));
+          }),
+      },
+    },
+  };
+  return { client, seen, release: () => release() };
+}
+
+test("abort: a shared call stops only when every waiter has gone", async () => {
+  const c = slowClient();
+  const v = createVoicer({ client: c.client, log: () => {} });
+  const one = new AbortController();
+  const two = new AbortController();
+  const p1 = v.voiceLine("mission", "hackathon-10-days", 42, false, 0, { signal: one.signal });
+  const p2 = v.voiceLine("mission", "hackathon-10-days", 42, false, 0, { signal: two.signal });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(c.seen.length, 1);
+  one.abort();
+  assert.deepEqual((await p1).texts, {});
+  assert.equal(c.seen[0].aborted, false);
+  two.abort();
+  assert.deepEqual((await p2).texts, {});
+  assert.equal(c.seen[0].aborted, true);
+
+  // A waiter that stays gets the answer even though another left.
+  const d = slowClient();
+  const w = createVoicer({ client: d.client, log: () => {} });
+  const gone = new AbortController();
+  const q1 = w.voiceLine("mission", "hackathon-10-days", 42, false, 1, { signal: gone.signal });
+  const q2 = w.voiceLine("mission", "hackathon-10-days", 42, false, 1, { signal: new AbortController().signal });
+  gone.abort();
+  d.release();
+  assert.deepEqual((await q1).texts, {});
+  assert.ok(Object.keys((await q2).texts).length);
+  assert.equal(d.seen[0].aborted, false);
+
+  // Already aborted: no call at all.
+  const e = slowClient();
+  const x = createVoicer({ client: e.client, log: () => {} });
+  const done = new AbortController();
+  done.abort();
+  assert.deepEqual((await x.voiceLine("mission", "hackathon-10-days", 42, false, 0, { signal: done.signal })).texts, {});
+  assert.equal(e.seen.length, 0);
 });

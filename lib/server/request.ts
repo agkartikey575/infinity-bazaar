@@ -15,3 +15,9 @@ export function checkOrigin(req: { url: string; headers: { get(name: string): st
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (type !== "application/json") throw new HttpError(415, "Send JSON.");
 }
+
+/** The caller's address for the per-client limit: the first x-forwarded-for entry, else x-real-ip. */
+export function clientIp(req: { headers: { get(name: string): string | null } }): string {
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || req.headers.get("x-real-ip")?.trim() || "unknown";
+}

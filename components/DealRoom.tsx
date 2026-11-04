@@ -46,6 +46,7 @@ function voiceSteps(steps: Step[], applied: (LineVoices | null)[]): Step[] {
     return text ? { ...s, beat: { ...s.beat, text } } : s;
   });
 }
+const NO_FROZEN: Record<number, LineVoices | null> = {};
 /** Table numbers the server accepts. */
 const MAX_TABLE = 999_999_999;
 
@@ -134,20 +135,31 @@ export default function DealRoom() {
   // screen never changes mid-read; voices that arrive later apply from the next line.
   const voiceId = rogue ? "usb-mic" : selection.split(":")[1];
   const voiceRef = useMemo(() => ({ kind: run.kind, id: voiceId, seed }), [run.kind, voiceId, seed]);
-  const ai = useVoices(voiceRef, run.lines.length);
+  const ai = useVoices(voiceRef, run.lines.length, playing);
   const [showOriginal, setShowOriginal] = useState(false);
   const started = cursor > 0 && baseSteps.length ? baseSteps[Math.min(cursor, baseSteps.length) - 1].line : -1;
-  const frozen = useRef<{ key: string; lines: Record<number, LineVoices | null> }>({ key: "", lines: {} });
   const playKey = `${run.kind}:${voiceId}:${seed}:${nonce}`;
-  if (frozen.current.key !== playKey) frozen.current = { key: playKey, lines: {} };
-  for (let i = 0; i <= started; i++) if (!(i in frozen.current.lines)) frozen.current.lines[i] = ai.voices[i] ?? null;
-  const applied = run.lines.map((_, i) => (showOriginal ? null : i <= started ? frozen.current.lines[i] ?? null : ai.voices[i] ?? null));
-  const voiced = useRef<{ base: Step[]; applied: (LineVoices | null)[]; steps: Step[] } | null>(null);
-  const prev = voiced.current;
-  if (!prev || prev.base !== baseSteps || prev.applied.length !== applied.length || prev.applied.some((v, i) => v !== applied[i])) {
-    voiced.current = { base: baseSteps, applied, steps: voiceSteps(baseSteps, applied) };
-  }
-  const steps = voiced.current!.steps;
+  // The words each started line plays with, for this Play. Until the effect below records
+  // a line, it shows its current voices, which are exactly what the effect then records.
+  const [frozen, setFrozen] = useState<{ key: string; lines: Record<number, LineVoices | null> }>({ key: "", lines: {} });
+  const frozenLines = frozen.key === playKey ? frozen.lines : NO_FROZEN;
+  useEffect(() => {
+    setFrozen((prev) => {
+      const lines = { ...(prev.key === playKey ? prev.lines : {}) };
+      let changed = prev.key !== playKey;
+      for (let i = 0; i <= started; i++) {
+        if (i in lines) continue;
+        lines[i] = ai.voices[i] ?? null;
+        changed = true;
+      }
+      return changed ? { key: playKey, lines } : prev;
+    });
+  }, [started, playKey, ai.voices]);
+  const steps = useMemo(() => {
+    const applied = run.lines.map((_, i) => (showOriginal ? null : i <= started && i in frozenLines ? frozenLines[i] : ai.voices[i] ?? null));
+    return voiceSteps(baseSteps, applied);
+  }, [run, baseSteps, showOriginal, started, frozenLines, ai.voices]);
+  const voicedLine = (i: number) => !showOriginal && Boolean(i <= started && i in frozenLines ? frozenLines[i] : ai.voices[i]);
   const hasVoices = Object.keys(ai.voices).length > 0;
   const baseView = useMemo(() => deriveView(run, steps, cursor), [run, steps, cursor]);
   const finished = cursor >= steps.length && waitingFor === null;
@@ -225,12 +237,13 @@ export default function DealRoom() {
     }
   }, [live.lines, decisions]);
 
+  // Keyed on the engine's steps, not the voiced ones: voices arriving must not restart the timer.
   useEffect(() => {
     if (!playing || cursor >= steps.length || (gate && !gate.ready)) return;
     const last = steps[cursor - 1];
     const t = setTimeout(() => setCursor((c) => c + 1), last ? stepDelay(last, steps[cursor]) / speed : 300);
     return () => clearTimeout(t);
-  }, [playing, cursor, steps, speed, gate?.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playing, cursor, baseSteps, speed, gate?.ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** In real mode, show what PayPal actually did instead of the simulated steps. */
   const view = useMemo(() => {
@@ -458,9 +471,9 @@ export default function DealRoom() {
               ))}
             </select>
           </label>
-          {ai.enabled && hasVoices && (
+          {ai.enabled && (
             <label className="switch voice-toggle" title="Show the original lines instead of the live AI voices">
-              <input type="checkbox" checked={showOriginal} onChange={(e) => setShowOriginal(e.target.checked)} />
+              <input type="checkbox" checked={showOriginal} disabled={!hasVoices} onChange={(e) => setShowOriginal(e.target.checked)} />
               Show original lines
             </label>
           )}
@@ -573,7 +586,7 @@ export default function DealRoom() {
             walkAway={view.plan?.walkAway ?? null}
             state={arenaState}
           />
-          <Caption lines={view.commentary} event={view.event} badge={applied[view.line] ? "Live AI voices · Claude" : null} />
+          <Caption lines={view.commentary} event={view.event} badge={voicedLine(view.line) ? "Live AI voices · Claude" : null} />
         </div>
 
         <div className={`pipeline ${pipe}`}>
