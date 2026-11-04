@@ -27,6 +27,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.137.0",
     "next": "^15.5.28",
     "react": "^19.1.10",
     "react-dom": "^19.1.10"

@@ -194,6 +194,10 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .caster { font: 600 16px/1.35 var(--display); animation: pop 0.35s ease both; }
 .history { font-size: 13px; color: rgba(244, 245, 255, 0.72); }
 .event { font: 700 12.5px var(--mono); padding: 6px 10px; border-radius: 8px; background: var(--brass-soft); color: var(--fg); max-width: 100%; }
+/* Live AI voices: a quiet credit in the lower third. */
+.ai-badge { margin-left: auto; font: 600 11px var(--mono); letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid rgba(244, 245, 255, 0.28); color: rgba(244, 245, 255, 0.8); white-space: nowrap; }
+.voice-toggle { font-size: 12px; color: var(--muted); }
 
 /* AgentGuard gate → PayPal. */
 .pipeline { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; padding: 18px; border-bottom: 1px solid var(--line); background: var(--sunk); }

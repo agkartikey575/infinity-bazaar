@@ -287,7 +287,7 @@ export function Arena({
   );
 }
 
-export function Caption({ lines, event }: { lines: string[]; event: string | null }) {
+export function Caption({ lines, event, badge }: { lines: string[]; event: string | null; badge?: string | null }) {
   return (
     <div className="caption">
       <span className="onair" aria-hidden="true">
@@ -301,6 +301,7 @@ export function Caption({ lines, event }: { lines: string[]; event: string | nul
         {lines[1] && <p className="history">{lines[1]}</p>}
       </div>
       {event && <span className="event">⚡ {event}</span>}
+      {badge && <span className="ai-badge">{badge}</span>}
     </div>
   );
 }

@@ -11,8 +11,10 @@ import {
   type Decision,
   type LineStatus,
   type Run,
+  type Step,
 } from "../lib/timeline.ts";
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
+import { useVoices, type LineVoices } from "./useVoices.ts";
 import { Arena, Caption, Gate } from "./Arena.tsx";
 
 const SPEEDS = [0.5, 1, 1.5, 2, 4];
@@ -32,6 +34,18 @@ const STATUS_LABEL: Record<LineStatus, string> = {
 };
 
 const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+
+/** The same steps with each beat's text swapped for its line's live voice, when it has one. */
+function voiceSteps(steps: Step[], applied: (LineVoices | null)[]): Step[] {
+  if (!applied.some(Boolean)) return steps;
+  const beatNo: Record<number, number> = {};
+  return steps.map((s) => {
+    if (s.type !== "beat") return s;
+    const n = (beatNo[s.line] = (beatNo[s.line] ?? -1) + 1);
+    const text = applied[s.line]?.[n];
+    return text ? { ...s, beat: { ...s.beat, text } } : s;
+  });
+}
 /** Table numbers the server accepts. */
 const MAX_TABLE = 999_999_999;
 
@@ -113,7 +127,28 @@ export default function DealRoom() {
     return kind === "mission" ? buildMissionRun(id, seed) : buildSingleRun(id, seed);
   }, [selection, seed, rogue]);
 
-  const { steps, waitingFor } = useMemo(() => buildSteps(run, decisions), [run, decisions]);
+  const { steps: baseSteps, waitingFor } = useMemo(() => buildSteps(run, decisions), [run, decisions]);
+
+  // Live AI voices reword the chat; the engine's steps above still decide every price,
+  // AgentGuard check and payment. A line keeps the words it started with, so text on
+  // screen never changes mid-read; voices that arrive later apply from the next line.
+  const voiceId = rogue ? "usb-mic" : selection.split(":")[1];
+  const voiceRef = useMemo(() => ({ kind: run.kind, id: voiceId, seed }), [run.kind, voiceId, seed]);
+  const ai = useVoices(voiceRef, run.lines.length);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const started = cursor > 0 && baseSteps.length ? baseSteps[Math.min(cursor, baseSteps.length) - 1].line : -1;
+  const frozen = useRef<{ key: string; lines: Record<number, LineVoices | null> }>({ key: "", lines: {} });
+  const playKey = `${run.kind}:${voiceId}:${seed}:${nonce}`;
+  if (frozen.current.key !== playKey) frozen.current = { key: playKey, lines: {} };
+  for (let i = 0; i <= started; i++) if (!(i in frozen.current.lines)) frozen.current.lines[i] = ai.voices[i] ?? null;
+  const applied = run.lines.map((_, i) => (showOriginal ? null : i <= started ? frozen.current.lines[i] ?? null : ai.voices[i] ?? null));
+  const voiced = useRef<{ base: Step[]; applied: (LineVoices | null)[]; steps: Step[] } | null>(null);
+  const prev = voiced.current;
+  if (!prev || prev.base !== baseSteps || prev.applied.length !== applied.length || prev.applied.some((v, i) => v !== applied[i])) {
+    voiced.current = { base: baseSteps, applied, steps: voiceSteps(baseSteps, applied) };
+  }
+  const steps = voiced.current!.steps;
+  const hasVoices = Object.keys(ai.voices).length > 0;
   const baseView = useMemo(() => deriveView(run, steps, cursor), [run, steps, cursor]);
   const finished = cursor >= steps.length && waitingFor === null;
   const awaiting = cursor >= steps.length && waitingFor !== null;
@@ -423,6 +458,12 @@ export default function DealRoom() {
               ))}
             </select>
           </label>
+          {ai.enabled && hasVoices && (
+            <label className="switch voice-toggle" title="Show the original lines instead of the live AI voices">
+              <input type="checkbox" checked={showOriginal} onChange={(e) => setShowOriginal(e.target.checked)} />
+              Show original lines
+            </label>
+          )}
           {live.status.mode === "sandbox" && (
             <div className="paypal-mode">
               <label className="switch" title="Pay with real PayPal sandbox accounts instead of demo payments">
@@ -532,7 +573,7 @@ export default function DealRoom() {
             walkAway={view.plan?.walkAway ?? null}
             state={arenaState}
           />
-          <Caption lines={view.commentary} event={view.event} />
+          <Caption lines={view.commentary} event={view.event} badge={applied[view.line] ? "Live AI voices · Claude" : null} />
         </div>
 
         <div className={`pipeline ${pipe}`}>
