@@ -73,8 +73,13 @@ const installCamera = () =>
       const gate = document.querySelector(".gate"), pay = document.querySelector(".paypal");
       const text = (gate?.innerText ?? "") + "|" + (pay?.innerText ?? "");
       if (text !== last) { if (decisive.test(text)) until = Date.now() + 4000; last = text; }
-      if (Date.now() < until) return at(gate ?? pay, 60);
-      at(document.querySelector(".arena"), 8);
+      // Payment moment: slide down just enough to show the whole AgentGuard check and PayPal panel.
+      if (Date.now() < until) {
+        const bottom = Math.max(gate?.getBoundingClientRect().bottom ?? 0, pay?.getBoundingClientRect().bottom ?? 0) + window.scrollY;
+        return go(bottom - window.innerHeight + 24);
+      }
+      // The deal: budget bar, price card, three chats with their gap bars, and the live commentary.
+      at(document.querySelector(".mission"), 10);
     }, 500);
   });
 const cam = (mode) => page.evaluate((m) => (window.__cam = m), mode);
@@ -103,7 +108,7 @@ mark("haggle-end");
 if (LIVE) {
   const { loginInPayPal, PAY_BUTTON } = await import("../tests/e2e/paypal-helpers.mjs");
   mark("paypal");
-  await cam("top"); await wait(600); await cam("auto");
+  await cam("auto");
   await page.getByLabel(/PayPal (\(sandbox\)|sandbox)/i).check();
   await page.locator("#selection").selectOption("item:usb-mic");
   await table(1);
@@ -134,7 +139,7 @@ if (LIVE) {
 
 // 6. Above the approval line, the agent asks first.
 mark("ask");
-await cam("top"); await wait(600); await cam("auto");
+await cam("auto");
 await page.locator("#selection").selectOption("mission:hackathon-10-days");
 await table(7);
 await page.selectOption("#speed", "4");
@@ -150,7 +155,7 @@ mark("ask-end");
 
 // 7. The rogue agent: talked into a $140 upsell, stopped by AgentGuard.
 mark("rogue");
-await cam("top"); await wait(600); await cam("auto");
+await cam("auto");
 await btn("Agent goes rogue").click();
 await page.selectOption("#speed", "2");
 await page.getByText("Nothing was sent to PayPal", { exact: false }).first().waitFor({ timeout: 120_000 }).catch(() => undefined);
@@ -163,7 +168,7 @@ mark("rogue-end");
 mark("outro");
 await cam("receipt");
 await wait(4000);
-await cam("top"); await wait(600); await cam("auto");
+await cam("auto");
 await wait(5000);
 mark("outro-end");
 
