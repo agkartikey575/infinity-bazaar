@@ -40,6 +40,8 @@ export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_DAILY_LIMIT = 300;
 const CACHE_SIZE = 500;
 const TIMEOUT_MS = 20_000;
+/** How long a line that came back with no texts is answered from memory instead of asking again. */
+export const FAILED_TTL_MS = 10 * 60 * 1000;
 
 // ---------- Number lock ----------
 //
@@ -47,8 +49,12 @@ const TIMEOUT_MS = 20_000;
 // - its dollar amounts, in order, are exactly the original's, written the same way ("$12.50" stays "$12.50");
 // - its percentages, in order, are exactly the original's;
 // - every other number in it also appears in the original;
-// - no amount gains a size or time unit the original didn't give it ("$53k", "$53 per month");
-// - it spells out no number the original didn't ("fifty", "half", "double", "percent");
+// - every bare number (not a dollar amount or percentage) is also a bare number in the original,
+//   so "$53" can't come back as "$53, and 53 cents back";
+// - no amount gains a unit or qualifier the original didn't give it: before it ("about $53",
+//   "up to $53") or after it ("$53k", "$53 per month", "$53 each", "$53 off", "$53 plus tax");
+// - it names no other currency ("€", "GBP") and spells out no number ("fifty", "half",
+//   "zero", "percent") unless the original does too;
 // - every digit is a plain 0-9 and every comma sits in a real thousands group.
 
 /** A number as written: plain, decimal, or with valid thousands commas. */
@@ -60,30 +66,47 @@ const NUMBERS = new RegExp(NUM, "g");
 const DIGIT_RUNS = /\d[\d,]*\d|\d/g;
 const VALID_RUN = /^(?:\d+|\d{1,3}(?:,\d{3})+)$/;
 const NON_ASCII_DIGIT = /(?![0-9])\p{Nd}/u;
-/** Size or time units that change what an amount means. */
-const SUFFIX = /^\s*(k|m|mm|b|bn|mil|thousand|million|billion|grand|\/\s*(?:mo|month|yr|year|wk|week|day|hr|hour)|per\s+(?:mo|month|yr|year|wk|week|day|hr|hour)|a\s+(?:month|year|week|day)|monthly|yearly|annually|weekly|daily)\b/i;
+/** Units and qualifiers right after an amount that change what it means. */
+const SUFFIX =
+  /^\s*(k|m|mm|b|bn|mil|thou|thousand|million|billion|grand|large|cents?|each|apiece|off|tax|plus\s+tax|per\s+\w+|a\s+(?:pop|month|year|week|day)|for\s+(?:the\s+)?(?:pair|two|both)|-?\s*ish|\/\s*(?:mo|month|yr|year|wk|week|day|hr|hour)|monthly|yearly|annually|weekly|daily)\b/i;
+/** Qualifiers right before an amount that loosen it. */
+const PREFIX = /\b(roughly|about|around|approx|approximately|nearly|almost|under|over|up\s+to)\.?\s*\$?\s*$/i;
+/** Currency symbols other than $, and currency codes. */
+const CURRENCIES = /(?!\$)\p{Sc}|\b(?:USD|EUR|GBP|INR)\b/giu;
 const NUMBER_WORDS = new RegExp(
-  String.raw`\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|dozen|half|quarter|double|twice|triple|percent|per\s+cent)\b`,
+  String.raw`\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|dozen|half|quarter|double|twice|triple|percent|per\s+cent)\b`,
   "gi",
 );
-const EMOJI = /\p{Extended_Pictographic}/u;
+/** Emoji, flags (regional indicators), keycaps and emoji variation selectors. */
+const EMOJI = /\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}|[\u20E3\uFE0F]/u;
+/** Control and format characters, including hidden line breaks (U+0085, U+2028, U+2029) and zero-width marks. */
+const HIDDEN = /\p{Cc}|\p{Cf}|[\u2028\u2029\u0085]/u;
 
 const all = (re: RegExp, s: string, group = 0) => [...s.matchAll(re)].map((m) => m[group]);
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** Each number with the unit written right after it, such as "53 k" or "14 /mo". */
+const squash = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/^- ?/, "-");
+
+/** Each number with the qualifier written right before or after it, such as "about 53" or "53 k". */
 function unitsIn(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(NUMBERS)) {
-    const u = text.slice(m.index! + m[0].length).match(SUFFIX);
-    if (u) out.push(`${m[0]} ${u[1].toLowerCase().replace(/\s+/g, " ")}`);
+    const after = text.slice(m.index! + m[0].length).match(SUFFIX);
+    if (after) out.push(`${m[0]} ${squash(after[1])}`);
+    const before = text.slice(0, m.index!).match(PREFIX);
+    if (before) out.push(`${squash(before[1])} ${m[0]}`);
   }
   return out;
 }
 
-/** Dollar amounts and percentages in order, exactly as written, and every number. */
+/** Numbers that are neither a dollar amount nor a percentage. */
+function bareNumbers(text: string): string[] {
+  return [...text.matchAll(NUMBERS)].filter((m) => !/\$\s?$/.test(text.slice(0, m.index!)) && !/^\s?%/.test(text.slice(m.index! + m[0].length))).map((m) => m[0]);
+}
+
+/** Dollar amounts and percentages in order, exactly as written, and every bare number. */
 export function amountsIn(text: string) {
-  return { dollars: all(DOLLARS, text, 1), percents: all(PERCENTS, text, 1), numbers: all(NUMBERS, text) };
+  return { dollars: all(DOLLARS, text, 1), percents: all(PERCENTS, text, 1), bare: bareNumbers(text) };
 }
 
 /** True when `next` says exactly the same numbers as `original`. See the rules above. */
@@ -94,12 +117,14 @@ export function keepsNumbers(original: string, next: string): boolean {
   const b = amountsIn(next);
   if (!sameList(a.dollars, b.dollars)) return false;
   if (!sameList(a.percents, b.percents)) return false;
-  // A bare number could be read as a price ("53 bucks"), so new numbers are not allowed either.
-  if (!b.numbers.every((n) => a.numbers.includes(n))) return false;
+  // A bare number could be read as a price ("53 bucks"), so it must be a bare number in the original too.
+  if (!b.bare.every((n) => a.bare.includes(n))) return false;
   const units = unitsIn(original);
   if (!unitsIn(next).every((u) => units.includes(u))) return false;
-  const words = new Set(all(NUMBER_WORDS, original).map((w) => w.toLowerCase().replace(/\s+/g, " ")));
-  if (!all(NUMBER_WORDS, next).every((w) => words.has(w.toLowerCase().replace(/\s+/g, " ")))) return false;
+  const words = new Set(all(NUMBER_WORDS, original).map(squash));
+  if (!all(NUMBER_WORDS, next).every((w) => words.has(squash(w)))) return false;
+  const currencies = new Set(all(CURRENCIES, original).map((c) => c.toUpperCase()));
+  if (!all(CURRENCIES, next).every((c) => currencies.has(c.toUpperCase()))) return false;
   return true;
 }
 
@@ -107,7 +132,7 @@ export function acceptLine(original: string, next: unknown): next is string {
   if (typeof next !== "string") return false;
   const t = next.trim();
   if (!t || t === original) return false;
-  if (/[\r\n]/.test(t) || EMOJI.test(t)) return false;
+  if (HIDDEN.test(t) || EMOJI.test(t)) return false;
   if (t.length > Math.max(220, original.length * 2 + 40)) return false;
   return keepsNumbers(original, t);
 }
@@ -357,28 +382,35 @@ export function createVoicer(opts: VoicerOptions) {
   const budget = new DailyBudget(opts.dailyLimit ?? DEFAULT_DAILY_LIMIT, opts.now);
   const perClient = new ClientLimit(opts.perClientLimit ?? DEFAULT_PER_CLIENT_LIMIT, opts.now);
   const cache = new Lru<VoiceResult>(CACHE_SIZE);
+  /** When a line last came back with no texts after Claude answered or failed: asked again only after a while. */
+  const failed = new Lru<number>(CACHE_SIZE);
+  const now = opts.now ?? Date.now;
   const inFlight = new Map<string, Flight>();
   const log = opts.log ?? ((msg: string, detail?: unknown) => console.warn(msg, detail ?? ""));
   const none = (ms = 0): VoiceResult => ({ texts: {}, model: null, ms });
 
-  async function call(kind: VoiceKind, id: string, seed: number, line: number, signal: AbortSignal): Promise<VoiceResult> {
+  /** The result, and whether Claude was really asked (not aborted or over budget before an answer). */
+  async function call(kind: VoiceKind, id: string, seed: number, line: number, signal: AbortSignal): Promise<[VoiceResult, boolean]> {
     const started = Date.now();
     const input = voiceInput(rebuild(kind, id, seed), line);
-    if (!input.lines.length || !opts.client) return none();
+    if (!input.lines.length || !opts.client) return [none(), true];
+    let asked = false;
     const body = buildRequest(model, input) as never;
     // One try plus at most one retry, each counted against the daily budget. The SDK's own retries are off.
     for (let attempt = 0; attempt < 2; attempt++) {
       if (signal.aborted || !budget.take()) break;
       try {
         const res = (await opts.client.beta.messages.create(body, { timeout: TIMEOUT_MS, maxRetries: 0, signal })) as VoiceResponse;
+        asked = true;
         if (res.usage) opts.onUsage?.(res.usage, res.model ?? model);
         if (res.stop_reason !== "end_turn") {
           log("voice: no texts", res.stop_reason);
           break;
         }
-        return { texts: readResponse(res, input), model: res.model ?? model, ms: Date.now() - started };
+        return [{ texts: readResponse(res, input), model: res.model ?? model, ms: Date.now() - started }, true];
       } catch (e) {
         if (signal.aborted || e instanceof Anthropic.APIUserAbortError) break;
+        asked = true;
         if (e instanceof Anthropic.APIConnectionError) log("voice: could not reach Claude", e.message);
         else if (e instanceof Anthropic.APIError) log(`voice: Claude error ${e.status}`, e.message);
         else log("voice: failed", e instanceof Error ? e.message : e);
@@ -386,7 +418,7 @@ export function createVoicer(opts: VoicerOptions) {
         await wait(opts.retryDelayMs ?? 500, signal);
       }
     }
-    return none(Date.now() - started);
+    return [none(Date.now() - started), asked && !signal.aborted];
   }
 
   /** Waits for a shared call. Leaving early aborts the call only when every waiter has left. */
@@ -417,6 +449,8 @@ export function createVoicer(opts: VoicerOptions) {
     const key = cacheKey(kind, id, seed, rogue, line);
     const hit = cache.get(key);
     if (hit) return { ...hit, ms: 0 };
+    const lastFail = failed.get(key);
+    if (lastFail !== undefined && now() - lastFail < FAILED_TTL_MS) return none();
     let f = inFlight.get(key);
     if (!f) {
       // Over a limit: answer at once, and the original lines play.
@@ -425,9 +459,10 @@ export function createVoicer(opts: VoicerOptions) {
       const ctrl = new AbortController();
       const flight: Flight = { ctrl, waiters: 0, p: Promise.resolve(none()) };
       flight.p = call(kind, id, seed, line, ctrl.signal)
-        .then((r) => {
-          // Only good answers are kept, so a passing failure can be retried later.
+        .then(([r, asked]) => {
+          // Good answers are kept; a line that came back empty is not asked again for a while.
           if (Object.keys(r.texts).length) cache.set(key, r);
+          else if (asked) failed.set(key, now());
           return r;
         })
         .finally(() => inFlight.delete(key));

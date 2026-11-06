@@ -16,6 +16,8 @@ export interface VoiceRef {
 }
 
 const NONE: Record<number, LineVoices> = {};
+/** A line that came back without voices isn't asked for again for this long (the server remembers it as long). */
+const EMPTY_TTL_MS = 10 * 60 * 1000;
 
 export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
   const [enabled, setEnabled] = useState(false);
@@ -23,6 +25,8 @@ export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
   const [voices, setVoices] = useState<{ key: string; lines: Record<number, LineVoices> }>({ key: "", lines: NONE });
   /** Requests for the current run: which lines are loading or done, and how to cancel them. */
   const job = useRef<{ key: string; ctrl: AbortController; busy: Set<number>; done: Set<number> } | null>(null);
+  /** When each run's line last came back without voices, during this page session. */
+  const emptyAt = useRef(new Map<string, number>());
 
   useEffect(() => {
     let alive = true;
@@ -40,6 +44,8 @@ export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
     if (!j) return;
     for (let line = 0; line < lineCount; line++) {
       if (j.busy.has(line) || j.done.has(line)) continue;
+      const empty = emptyAt.current.get(`${j.key}:${line}`);
+      if (empty !== undefined && Date.now() - empty < EMPTY_TTL_MS) continue;
       j.busy.add(line);
       fetch("/api/voice", {
         method: "POST",
@@ -51,7 +57,11 @@ export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
         .then((d: { texts?: Record<string, string> } | null) => {
           const lv: LineVoices = {};
           for (const [k, v] of Object.entries(d?.texts ?? {})) if (typeof v === "string") lv[Number(k)] = v;
-          if (!Object.keys(lv).length) return;
+          if (!Object.keys(lv).length) {
+            // Answered without voices: the original lines play, and Replay doesn't ask again.
+            emptyAt.current.set(`${j.key}:${line}`, Date.now());
+            return;
+          }
           j.done.add(line);
           setVoices((prev) => (prev.key === j.key ? { key: j.key, lines: { ...prev.lines, [line]: lv } } : prev));
         })
@@ -73,7 +83,7 @@ export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
     };
   }, [enabled, key, lineCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Play: try again for any line that came back without voices.
+  // Play: fetch any line whose request was cut off (lines answered without voices wait 10 minutes).
   useEffect(() => {
     if (enabled && playing) load();
   }, [playing]); // eslint-disable-line react-hooks/exhaustive-deps

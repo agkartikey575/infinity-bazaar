@@ -4,7 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildMissionRun } from "../lib/timeline.ts";
-import { acceptLine, amountsIn, buildRequest, cacheKey, ClientLimit, createVoicer, DailyBudget, keepsNumbers, Lru, readResponse, voiceInput, type VoiceClient } from "../lib/server/voice.ts";
+import { clientIp } from "../lib/server/request.ts";
+import { acceptLine, amountsIn, buildRequest, cacheKey, ClientLimit, createVoicer, DailyBudget, FAILED_TTL_MS, keepsNumbers, Lru, readResponse, voiceInput, type VoiceClient } from "../lib/server/voice.ts";
 
 test("number lock: keeps every dollar amount and adds none", () => {
   assert.equal(keepsNumbers("We can do $53! Super competitive, right?", "$53, and honestly that's a steal."), true);
@@ -25,7 +26,7 @@ test("number lock: keeps every dollar amount and adds none", () => {
   assert.equal(keepsNumbers("That comes to $1,200.", "All in, $1200."), false);
   assert.equal(keepsNumbers("That is $12.50 extra.", "It adds $12.50."), true);
   assert.equal(keepsNumbers("That is $12.50 extra.", "It adds $12.5."), false);
-  assert.deepEqual(amountsIn("Pay $1,200.00 or 15%."), { dollars: ["1,200.00"], percents: ["15"], numbers: ["1,200.00", "15"] });
+  assert.deepEqual(amountsIn("Pay $1,200.00 or 15%."), { dollars: ["1,200.00"], percents: ["15"], bare: [] });
 });
 
 test("number lock: order, units, words, digits and commas", () => {
@@ -189,20 +190,39 @@ test("budget: daily cap, reset at the next UTC day", async () => {
   assert.ok(Object.keys((await v.voiceLine("mission", "hackathon-10-days", 42, false, 0)).texts).length);
 });
 
-test("errors, refusals and no client all fall back to the original lines", async () => {
+test("errors, refusals and no client all fall back; empty results are not asked again for 10 minutes", async () => {
   const none = createVoicer({ client: null });
   assert.deepEqual((await none.voiceLine("mission", "hackathon-10-days", 42, false, 0)).texts, {});
 
-  let reply: unknown = new Error("network down");
+  let now = Date.parse("2026-11-06T10:00:00Z");
+  let reply: unknown = new Error("bad request");
   const { client, calls } = fakeClient(() => reply);
-  const v = createVoicer({ client, log: () => {} });
+  const v = createVoicer({ client, now: () => now, log: () => {} });
   assert.deepEqual((await v.voiceLine("rogue", "usb-mic", 7, true, 0)).texts, {});
+  assert.equal(calls.length, 1);
+  // Same line again within 10 minutes: answered from memory, no call.
+  reply = answer(good);
+  assert.deepEqual((await v.voiceLine("rogue", "usb-mic", 7, true, 0)).texts, {});
+  assert.equal(calls.length, 1);
+  // After 10 minutes it is asked again.
+  now += FAILED_TTL_MS + 1;
   reply = answer(good, "refusal");
   assert.deepEqual((await v.voiceLine("rogue", "usb-mic", 7, true, 0)).texts, {});
-  // Failures are not cached, so a later call can still succeed.
+  assert.equal(calls.length, 2);
+  now += FAILED_TTL_MS + 1;
   reply = { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ lines: [] }) }] };
   assert.deepEqual((await v.voiceLine("rogue", "usb-mic", 7, true, 0)).texts, {});
   assert.equal(calls.length, 3);
+  // Calls stopped by an abort or the budget are not remembered as failures.
+  const c = slowClient();
+  const w = createVoicer({ client: c.client, log: () => {} });
+  const gone = new AbortController();
+  const p = w.voiceLine("mission", "hackathon-10-days", 42, false, 0, { signal: gone.signal });
+  gone.abort();
+  await p;
+  c.release();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(Object.keys((await w.voiceLine("mission", "hackathon-10-days", 42, false, 0)).texts).length);
 });
 
 test("after a server-side fallback, the text after the last switch point is read", () => {
@@ -314,4 +334,48 @@ test("abort: a shared call stops only when every waiter has gone", async () => {
   done.abort();
   assert.deepEqual((await x.voiceLine("mission", "hackathon-10-days", 42, false, 0, { signal: done.signal })).texts, {});
   assert.equal(e.seen.length, 0);
+});
+
+test("number lock: qualifiers, currencies, bare numbers and zero", () => {
+  const o = "Counter at $53.";
+  for (const bad of [
+    "Counter at $53 each.", "Counter at $53 apiece.", "Counter at $53 per unit.", "Counter at $53 a pop.",
+    "Counter at $53 for the pair.", "Counter at $53 for two.", "Counter at $53 for both.", "Counter at $53 thou.",
+    "Counter at $53 large.", "Counter at $53 off.", "Counter at $53 plus tax.", "Counter at $53 tax.",
+    "Counter at $53-ish.", "Counter at $53ish.", "Counter at $53 cents.",
+    "Counter at roughly $53.", "Counter at about $53.", "Counter at around $53.", "Counter at approx. $53.",
+    "Counter at approximately $53.", "Counter at nearly $53.", "Counter at almost $53.", "Counter at under $53.",
+    "Counter at over $53.", "Counter at up to $53.",
+    "Counter at $53, or €53.", "Counter at $53 USD.", "Counter at $53, about £40 less.", "Counter at $53, ₹ welcome.", "Counter at $53 or 53 EUR.",
+    "Counter at $53, and 53 cents back.", "Counter at $53, give or take 53.",
+    "Counter at $53, zero fees.",
+  ]) {
+    assert.equal(acceptLine(o, bad), false, bad);
+  }
+  // Fine when the original says the same thing next to the same amount.
+  assert.equal(acceptLine("It's $20 each, final.", "Final word: $20 each."), true);
+  assert.equal(acceptLine("Prices start around $23 online.", "Online, prices start around $23."), true);
+  assert.equal(acceptLine("That's $10 off today.", "Today you get $10 off."), true);
+  assert.equal(acceptLine("Zero fees at $40.", "At $40, zero fees."), true);
+  assert.equal(acceptLine("Ships in 3 days for $40.", "For $40 it ships in 3 days."), true);
+  // A qualifier moved to a different amount still fails.
+  assert.equal(acceptLine("It's $20 each or $50 total.", "It's $20 or $50 each."), false);
+});
+
+test("acceptLine rejects hidden line breaks, control and format characters, and flags", () => {
+  const o = "We can do $53!";
+  for (const bad of ["Deal at $53\u2028now.", "Deal at $53\u2029now.", "Deal at $53\u0085now.", "Deal at $53\tnow.", "Deal at\u200B $53.", "Deal at $53\u200D.", "Deal at \u202E$53.", "Deal at $53\u00AD.", "Deal at $53 \u{1F1FA}\u{1F1F8}.", "Deal at $53 \u2764\uFE0F.", "Deal at $53 #\uFE0F\u20E3.", "Deal at $53 \u{1F600}."]) {
+    assert.equal(acceptLine(o, bad), false, JSON.stringify(bad));
+  }
+  assert.equal(acceptLine(o, "Deal at $53, \u201cfinal\u201d \u2014 friend."), true);
+});
+
+test("clientIp: on Vercel, x-vercel-forwarded-for, then x-real-ip, then x-forwarded-for; elsewhere one bucket", () => {
+  const req = (h: Record<string, string>) => ({ headers: { get: (n: string) => h[n] ?? null } });
+  const all3 = { "x-vercel-forwarded-for": "1.1.1.1", "x-real-ip": "2.2.2.2", "x-forwarded-for": "3.3.3.3, 10.0.0.1" };
+  assert.equal(clientIp(req(all3), true), "1.1.1.1");
+  assert.equal(clientIp(req({ "x-real-ip": "2.2.2.2", "x-forwarded-for": "3.3.3.3" }), true), "2.2.2.2");
+  assert.equal(clientIp(req({ "x-forwarded-for": "3.3.3.3, 10.0.0.1" }), true), "3.3.3.3");
+  assert.equal(clientIp(req({}), true), "unknown");
+  assert.equal(clientIp(req(all3), false), "local");
 });

@@ -16,8 +16,15 @@ export function checkOrigin(req: { url: string; headers: { get(name: string): st
   if (type !== "application/json") throw new HttpError(415, "Send JSON.");
 }
 
-/** The caller's address for the per-client limit: the first x-forwarded-for entry, else x-real-ip. */
-export function clientIp(req: { headers: { get(name: string): string | null } }): string {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || req.headers.get("x-real-ip")?.trim() || "unknown";
+/**
+ * The caller's address, for the per-client voice limit. On Vercel the platform sets
+ * x-vercel-forwarded-for (and x-real-ip, x-forwarded-for) itself, so the first entry is the
+ * visitor. Anywhere else these headers come from the visitor and could be faked, so every
+ * request shares one bucket. The per-client limit only spreads use fairly: the real bound on
+ * spend is the daily cap (VOICE_DAILY_LIMIT).
+ */
+export function clientIp(req: { headers: { get(name: string): string | null } }, onVercel = process.env.VERCEL === "1"): string {
+  if (!onVercel) return "local";
+  const first = (name: string) => req.headers.get(name)?.split(",")[0]?.trim();
+  return first("x-vercel-forwarded-for") || first("x-real-ip") || first("x-forwarded-for") || "unknown";
 }
