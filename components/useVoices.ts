@@ -16,6 +16,12 @@ export interface VoiceRef {
 }
 
 const NONE: Record<number, LineVoices> = {};
+/** Whether visitors get live voices without asking. `?voices=1` / `?voices=0` in the address overrides it. */
+const VOICES_ON_BY_DEFAULT = false;
+const voicesWanted = () => {
+  const q = new URLSearchParams(window.location.search).get("voices");
+  return q === null ? VOICES_ON_BY_DEFAULT : q === "1";
+};
 /** A line that came back without voices isn't asked for again for this long (the server remembers it as long). */
 const EMPTY_TTL_MS = 10 * 60 * 1000;
 
@@ -32,7 +38,7 @@ export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
     let alive = true;
     fetch("/api/voice")
       .then((r) => (r.ok ? r.json() : null))
-      .then((s) => alive && setEnabled(s?.enabled === true))
+      .then((s) => alive && setEnabled(s?.enabled === true && voicesWanted()))
       .catch(() => undefined);
     return () => {
       alive = false;
