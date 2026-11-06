@@ -17,7 +17,7 @@ export interface VoiceRef {
 
 const NONE: Record<number, LineVoices> = {};
 /** Whether visitors get live voices without asking. `?voices=1` / `?voices=0` in the address overrides it. */
-const VOICES_ON_BY_DEFAULT = false;
+const VOICES_ON_BY_DEFAULT = true;
 const voicesWanted = () => {
   const q = new URLSearchParams(window.location.search).get("voices");
   return q === null ? VOICES_ON_BY_DEFAULT : q === "1";

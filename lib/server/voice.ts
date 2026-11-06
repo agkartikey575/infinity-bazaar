@@ -36,7 +36,7 @@ interface VoiceResponse {
   model?: string;
 }
 
-export const DEFAULT_MODEL = "claude-opus-5-5";
+export const DEFAULT_MODEL = "claude-haiku-5-5";
 export const DEFAULT_DAILY_LIMIT = 300;
 const CACHE_SIZE = 500;
 const TIMEOUT_MS = 20_000;
