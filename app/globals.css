@@ -77,7 +77,7 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .bask { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed var(--rose); }
 .bnums { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: space-between; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.pricecard { display: grid; grid-template-columns: repeat(5, minmax(0, 0.6fr)) minmax(0, 2fr); border-bottom: 1px solid var(--line); }
+.pricecard { display: grid; grid-template-columns: repeat(6, minmax(0, 0.7fr)) minmax(0, 1.4fr); border-bottom: 1px solid var(--line); }
 .pc, .ladder { padding: 10px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ladder { border-right: 0; }
 .pc b { font: 700 19px var(--display); font-variant-numeric: tabular-nums; }
@@ -294,4 +294,30 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Your rules: budget and approval limit, set before playing. */
+.rules { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rules-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.stepper { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stepper:hover { border-color: var(--brass); }
+.stepper:focus-within { outline: 3px solid var(--brass); outline-offset: 2px; }
+.stepper input { border: 0; border-radius: 0; width: 4.2em; padding: 9px 2px; text-align: center; font-variant-numeric: tabular-nums; background: transparent; }
+.stepper input:focus-visible { outline: none; }
+.stepper button { border: 0; border-radius: 0; padding: 0 11px; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
+.stepper button:hover:not(:disabled) { color: var(--brass); background: var(--sunk); }
+button.link { border: 0; background: none; padding: 9px 2px; color: var(--brass); text-decoration: underline; text-underline-offset: 3px; border-radius: 6px; }
+button.link:disabled { color: var(--muted); text-decoration: none; }
+.rules-preview { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.rules-note { color: var(--rose); font-weight: 600; }
+.pc-sub { font: 11px var(--mono); color: var(--muted); }
+.pc.limit b { color: var(--ink); }
+.setup { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.rules-title { font: 600 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass); margin-right: 4px; }
+@media (max-width: 420px) {
+  .rules { flex-basis: 100%; }
+  .rules-row { flex-wrap: nowrap; }
+  .stepper-field { flex: 1 1 0; }
+  .stepper input { width: 100%; min-width: 2.6em; flex: 1 1 auto; }
+  .stepper button { padding: 0 9px; }
 }

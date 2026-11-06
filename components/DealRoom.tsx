@@ -6,6 +6,7 @@ import {
   buildMissionRun,
   buildSingleRun,
   buildSteps,
+  defaultRules,
   deriveView,
   stepDelay,
   type Decision,
@@ -13,6 +14,7 @@ import {
   type Run,
   type Step,
 } from "../lib/timeline.ts";
+import { ASK_MAX, ASK_MIN, BUDGET_MAX, BUDGET_MIN, clampRules, rulesFromQuery, rulesPreview, sameRules, type PlayerRules } from "../lib/rules.ts";
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 import { useVoices, type LineVoices } from "./useVoices.ts";
 import { Arena, Caption, Gate } from "./Arena.tsx";
@@ -47,8 +49,83 @@ function voiceSteps(steps: Step[], applied: (LineVoices | null)[]): Step[] {
   });
 }
 const NO_FROZEN: Record<number, LineVoices | null> = {};
-/** Table numbers the server accepts. */
-const MAX_TABLE = 999_999_999;
+/** Deal numbers the server accepts. */
+const MAX_DEAL = 999_999_999;
+const DEFAULT_SELECTION = "mission:hackathon-10-days";
+const DEFAULT_DEAL = 42;
+
+/** What a run is, from the "What to buy" choice. */
+function runKind(selection: string, rogue: boolean): { kind: Run["kind"]; id: string } {
+  if (rogue) return { kind: "rogue", id: "usb-mic" };
+  const [kind, id] = selection.split(":");
+  return { kind: kind === "mission" ? "mission" : "single", id };
+}
+const defaultsFor = (selection: string, rogue: boolean) => {
+  const k = runKind(selection, rogue);
+  return defaultRules(k.kind, k.id);
+};
+/** An empty field reads as "not set", so it falls back instead of becoming $0. */
+const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
+
+/** A dollar field with − and + steppers. Arrow keys step too; Enter applies. */
+function Stepper(props: {
+  id: string;
+  label: string;
+  name: string;
+  value: string;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: string) => void;
+  onEnter: () => void;
+}) {
+  const { id, label, name, value, min, max, step, onChange, onEnter } = props;
+  const now = num(value);
+  const bump = (dir: 1 | -1) => {
+    const base = Number.isFinite(now) ? now : min;
+    // Snap to the step, so 147 goes to 150 or 140.
+    const next = dir > 0 ? Math.floor(base / step) * step + step : Math.ceil(base / step) * step - step;
+    onChange(String(Math.min(max, Math.max(min, next))));
+  };
+  const keepFocus = (e: React.MouseEvent) => {
+    e.preventDefault();
+    document.getElementById(id)?.focus();
+  };
+  return (
+    <div className="field stepper-field">
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="stepper">
+        <button type="button" tabIndex={-1} aria-label={`Lower ${name} by $${step}`} onMouseDown={keepFocus} onClick={() => bump(-1)} disabled={Number.isFinite(now) && now <= min}>
+          −
+        </button>
+        <input
+          id={id}
+          role="spinbutton"
+          inputMode="numeric"
+          autoComplete="off"
+          value={value}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={Number.isFinite(now) ? now : undefined}
+          aria-describedby="rules-preview"
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onEnter();
+            else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              bump(e.key === "ArrowUp" ? 1 : -1);
+            }
+          }}
+        />
+        <button type="button" tabIndex={-1} aria-label={`Raise ${name} by $${step}`} onMouseDown={keepFocus} onClick={() => bump(1)} disabled={Number.isFinite(now) && now >= max}>
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
   let paid = 0;
@@ -105,8 +182,15 @@ function Receipt({ run, statuses }: { run: Run; statuses: LineStatus[] }) {
 }
 
 export default function DealRoom() {
-  const [selection, setSelection] = useState("mission:hackathon-10-days");
-  const [seed, setSeed] = useState(42);
+  const [selection, setSelection] = useState(DEFAULT_SELECTION);
+  const [seed, setSeed] = useState(DEFAULT_DEAL);
+  /** Your budget and approval limit, or null for the run's own. */
+  const [rules, setRules] = useState<PlayerRules | null>(null);
+  const [budgetDraft, setBudgetDraft] = useState(String(defaultsFor(DEFAULT_SELECTION, false).budgetUsd));
+  const [askDraft, setAskDraft] = useState(String(defaultsFor(DEFAULT_SELECTION, false).askAboveUsd));
+  const [rulesNote, setRulesNote] = useState<string | null>(null);
+  /** True once a shared link has been read, so the address isn't rewritten before then. */
+  const [linkRead, setLinkRead] = useState(false);
   const [rogue, setRogue] = useState(false);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [cursor, setCursor] = useState(0);
@@ -122,11 +206,56 @@ export default function DealRoom() {
   // Random per visitor from the first Play; generated in the browser so server and client render the same.
   useEffect(() => setNonce(newNonce()), []);
 
+  const defaults = useMemo(() => defaultsFor(selection, rogue), [selection, rogue]);
+  const applied = rules ?? defaults;
   const run = useMemo(() => {
-    if (rogue) return buildSingleRun("usb-mic", seed, true);
+    const custom = rules ?? undefined;
+    if (rogue) return buildSingleRun("usb-mic", seed, true, custom);
     const [kind, id] = selection.split(":");
-    return kind === "mission" ? buildMissionRun(id, seed) : buildSingleRun(id, seed);
-  }, [selection, seed, rogue]);
+    return kind === "mission" ? buildMissionRun(id, seed, custom) : buildSingleRun(id, seed, false, custom);
+  }, [selection, seed, rogue, rules]);
+
+  // A shared link sets the deal, what to buy and your rules: ?deal=42&budget=150&ask=60.
+  // Anything that doesn't read cleanly falls back to the defaults.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const buy = q.get("buy");
+    const sel =
+      buy && (buy.startsWith("mission:") ? missions.some((m) => `mission:${m.id}` === buy) : buy.startsWith("item:") && catalog.items.some((i) => `item:${i.id}` === buy)) ? buy : DEFAULT_SELECTION;
+    const isRogue = buy === "rogue";
+    const deal = q.get("deal");
+    const n = deal && /^\d{1,9}$/.test(deal) ? Number(deal) : NaN;
+    const r = rulesFromQuery(q.get("budget"), q.get("ask"));
+    setSelection(sel);
+    setRogue(isRogue);
+    if (n >= 1 && n <= MAX_DEAL) {
+      setSeed(n);
+      setSeedDraft(String(n));
+    }
+    setRules(r && !sameRules(r, defaultsFor(sel, isRogue)) ? r : null);
+    setLinkRead(true);
+  }, []);
+
+  // Keep the address in step with the deal on screen, so it can be shared as is.
+  useEffect(() => {
+    if (!linkRead) return;
+    const q = new URLSearchParams();
+    if (rogue) q.set("buy", "rogue");
+    else if (selection !== DEFAULT_SELECTION) q.set("buy", selection);
+    if (q.toString() || rules || seed !== DEFAULT_DEAL) q.set("deal", String(seed));
+    if (rules) {
+      q.set("budget", String(rules.budgetUsd));
+      q.set("ask", String(rules.askAboveUsd));
+    }
+    const url = `${window.location.pathname}${q.toString() ? `?${q}` : ""}${window.location.hash}`;
+    if (url !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.replaceState(window.history.state, "", url);
+  }, [linkRead, selection, seed, rogue, rules]);
+
+  // The fields always show the rules in force, until you start typing.
+  useEffect(() => {
+    setBudgetDraft(String(applied.budgetUsd));
+    setAskDraft(String(applied.askAboveUsd));
+  }, [applied.budgetUsd, applied.askAboveUsd]);
 
   const { steps: baseSteps, waitingFor } = useMemo(() => buildSteps(run, decisions), [run, decisions]);
 
@@ -167,8 +296,8 @@ export default function DealRoom() {
 
   // Real PayPal sandbox: the server pays; playback waits at each money step until it has.
   const runRef = useMemo(
-    () => ({ kind: run.kind, id: rogue ? "usb-mic" : selection.split(":")[1], seed, nonce }),
-    [run.kind, rogue, selection, seed, nonce],
+    () => ({ kind: run.kind, id: rogue ? "usb-mic" : selection.split(":")[1], seed, nonce, ...(rules ? { rules } : {}) }),
+    [run.kind, rogue, selection, seed, nonce, rules],
   );
   const live = useLivePayPal(runRef);
   const pendingWin = useRef<Window | null>(null);
@@ -188,6 +317,9 @@ export default function DealRoom() {
     return null;
   };
   const gate = gateAt(cursor);
+  /** Earlier lines AgentGuard blocked on screen that the server hasn't recorded yet. */
+  const unreported = (line: number) =>
+    steps.filter((s) => s.type === "guard" && s.line < line && s.guard.decision === "block" && ["idle", "working"].includes(live.lines[s.line]?.state ?? "idle")).map((s) => s.line);
 
   useEffect(() => {
     if (!playing || !gate || gate.ready) return;
@@ -197,6 +329,12 @@ export default function DealRoom() {
       return;
     }
     if (state !== "idle") return; // working, waiting for you, or failed
+    // The server takes lines in order: first let it record any earlier line AgentGuard blocked.
+    const before = unreported(gate.line);
+    if (before.length) {
+      for (const k of before) if ((live.lines[k]?.state ?? "idle") === "idle") live.pay(k, false);
+      return;
+    }
     if (gate.action === "pay") {
       const win = pendingWin.current;
       pendingWin.current = null;
@@ -215,7 +353,7 @@ export default function DealRoom() {
     if (!shown) return;
     const idle = (l: number) => (live.lines[l]?.state ?? "idle") === "idle";
     // Approved: pay now. Blocked: let the server's AgentGuard refuse too, so its verdict is on screen.
-    if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line)) live.pay(shown.line, false);
+    if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line) && !unreported(shown.line).length) live.pay(shown.line, false);
     if (shown.type === "event" && live.lines[shown.line]?.state === "authorized" && !live.lines[shown.line]?.review) live.deliver(shown.line);
   }, [cursor, playing, live.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -318,22 +456,62 @@ export default function DealRoom() {
 
   const applySeed = () => {
     const n = Math.floor(Number(seedDraft));
-    if (Number.isFinite(n) && n >= 1 && n <= MAX_TABLE && n !== seed) restart({ seed: n, rogue });
+    if (Number.isFinite(n) && n >= 1 && n <= MAX_DEAL && n !== seed) restart({ seed: n, rogue });
     else setSeedDraft(String(seed));
   };
 
-  const restart = (next: { selection?: string; seed?: number; rogue?: boolean }) => {
+  /** The rules the fields ask for, made valid, with a note when something had to change. */
+  const draftRules = (fallback: PlayerRules) => clampRules(num(budgetDraft), num(askDraft), fallback);
+  const rulesChanged = () => !sameRules(draftRules(applied).rules, applied);
+
+  /**
+   * Starts the run again with a new nonce. Rules typed but not applied yet are
+   * applied now; `resetRules` goes back to the run's own budget and approval limit.
+   */
+  const restart = (next: { selection?: string; seed?: number; rogue?: boolean; resetRules?: boolean }) => {
+    const sel = next.selection ?? selection;
+    const isRogue = next.rogue ?? false;
+    const target = defaultsFor(sel, isRogue);
+    let chosen: PlayerRules | null = null;
+    if (next.resetRules) setRulesNote(null);
+    else {
+      const c = draftRules(applied);
+      setRulesNote(c.note);
+      chosen = sameRules(c.rules, target) ? null : c.rules;
+    }
+    const shown = chosen ?? target;
+    setRules(chosen);
+    setBudgetDraft(String(shown.budgetUsd));
+    setAskDraft(String(shown.askAboveUsd));
     if (next.selection !== undefined) setSelection(next.selection);
     if (next.seed !== undefined) {
       setSeed(next.seed);
       setSeedDraft(String(next.seed));
     }
-    setRogue(next.rogue ?? false);
+    setRogue(isRogue);
     setNonce(newNonce());
     setDecisions({});
     setCursor(0);
     setPlaying(true);
   };
+
+  /** Enter, or focus leaving the rules: apply them if they changed, and say so if they had to be adjusted. */
+  const applyRules = () => {
+    const c = draftRules(applied);
+    if (!sameRules(c.rules, applied)) return restart({ seed, rogue });
+    setRulesNote(c.note);
+    setBudgetDraft(String(applied.budgetUsd));
+    setAskDraft(String(applied.askAboveUsd));
+  };
+  const resetRules = () => {
+    if (rules) return restart({ seed, rogue, resetRules: true });
+    setRulesNote(null);
+    setBudgetDraft(String(defaults.budgetUsd));
+    setAskDraft(String(defaults.askAboveUsd));
+  };
+  const previewRules = draftRules(applied).rules;
+  const k = runKind(selection, rogue);
+  const preview = rulesPreview(k.kind, k.id, previewRules, k.kind === "mission" ? undefined : Math.min(run.lines[0].itemCapUsd, previewRules.budgetUsd));
 
   const decide = (d: Decision) => {
     if (waitingFor === null) return;
@@ -405,9 +583,10 @@ export default function DealRoom() {
           <span className="eyebrow">Your AI haggles. Your rules guard the money.</span>
         </div>
         <div className="controls">
+          <div className="setup">
           <label className="field">
             <span className="label">What to buy</span>
-            <select id="selection" value={rogue ? "" : selection} onChange={(e) => restart({ selection: e.target.value, seed })}>
+            <select id="selection" value={rogue ? "" : selection} onChange={(e) => restart({ selection: e.target.value, seed, resetRules: true })}>
               {rogue && <option value="">Stress test: agent goes rogue</option>}
               <optgroup label="Missions">
                 {missions.map((m) => (
@@ -429,8 +608,8 @@ export default function DealRoom() {
               ))}
             </select>
           </label>
-          <label className="field table-no">
-            <span className="label">Table</span>
+          <label className="field table-no" title="Same number, same deal: sellers, prices and surprises.">
+            <span className="label">Deal #</span>
             <input
               id="seed"
               inputMode="numeric"
@@ -440,19 +619,41 @@ export default function DealRoom() {
               onKeyDown={(e) => e.key === "Enter" && applySeed()}
               aria-describedby="seed-help"
             />
-            <span id="seed-help" className="sr-only">Press Enter to replay this table.</span>
+            <span id="seed-help" className="sr-only">Same number, same deal: sellers, prices and surprises. Press Enter to play it.</span>
           </label>
+          <fieldset
+            className="rules"
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) applyRules();
+            }}
+          >
+            <legend className="sr-only">Your rules</legend>
+            <div className="rules-row">
+              <Stepper id="budget" label="Budget ($)" name="budget" value={budgetDraft} min={BUDGET_MIN} max={BUDGET_MAX} step={10} onChange={(v) => { setBudgetDraft(v); setRulesNote(null); }} onEnter={applyRules} />
+              <Stepper id="ask" label="Ask me above ($)" name="approval limit" value={askDraft} min={ASK_MIN} max={ASK_MAX} step={5} onChange={(v) => { setAskDraft(v); setRulesNote(null); }} onEnter={applyRules} />
+              <button type="button" className="link" onClick={resetRules} disabled={!rules && !rulesChanged() && !rulesNote}>
+                Reset
+              </button>
+            </div>
+            <p id="rules-preview" className="rules-preview" aria-live="polite">
+              <span className="rules-title" aria-hidden="true">
+                Your rules
+              </span>{" "}
+              {rulesNote ? <span className="rules-note">{rulesNote}.</span> : preview}
+            </p>
+          </fieldset>
+          </div>
           <div className="btns">
             <button
               className="primary"
               disabled={awaiting}
-              onClick={() => (finished ? restart({ seed, rogue }) : setPlaying((p) => !p))}
+              onClick={() => (finished || rulesChanged() ? restart({ seed, rogue }) : setPlaying((p) => !p))}
               aria-label={finished ? "Replay" : playing ? "Pause" : "Play"}
             >
               {finished ? "↺ Replay" : gate && !gate.ready && playing ? "Waiting for PayPal…" : playing ? "❚❚ Pause" : "▶ Play"}
             </button>
-            <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Deal a new table: new sellers, new prices, new surprises">
-              🎲 New table
+            <button onClick={() => restart({ seed: 1 + Math.floor(Math.random() * 999999), rogue })} title="Deal a new number: new sellers, new prices, new surprises">
+              🎲 New deal
             </button>
             <button onClick={skip} disabled={cursor >= steps.length || Boolean(gate && !gate.ready)} aria-label="Skip to the next decision or the end">
               ⏭ Skip
@@ -509,7 +710,7 @@ export default function DealRoom() {
           <div className="goal-box">
             <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Stress test" : "Single deal"}</span>
             <p className="goal">“{run.goal}”</p>
-            <span className="note">Table {run.seed} always replays the same deal.</span>
+            <span className="note">Deal #{run.seed} always replays the same deal.</span>
           </div>
           <div className="budget">
             <span className="label">Budget</span>
@@ -558,6 +759,11 @@ export default function DealRoom() {
             <div className="pc walk">
               <span className="label">Walk-away</span>
               <b>${view.plan.walkAway}</b>
+            </div>
+            <div className="pc limit" title="The most AgentGuard lets the agent pay for this item">
+              <span className="label">Your limit</span>
+              <b>{line.rules.itemCapUsd !== undefined ? money(line.rules.itemCapUsd) : money(run.budgetUsd)}</b>
+              <span className="pc-sub">of {money(run.budgetUsd)} budget</span>
             </div>
             <div className="ladder" aria-label="Agent's planned offers">
               <span className="label">{item.name} · planned offers</span>
@@ -636,7 +842,7 @@ export default function DealRoom() {
               <div className="row-bad">
                 {live.lines[view.line]?.errorFrom === "paypal"
                   ? "PayPal didn't respond as expected. Retry checks with PayPal first, so nothing is charged twice."
-                  : "Something went wrong with this payment. Nothing new was charged. Press Retry, or start a new table."}{" "}
+                  : "Something went wrong with this payment. Nothing new was charged. Press Retry, or start a new deal."}{" "}
                 {showDetails && <span className="row-detail">{live.lines[view.line]?.error}</span>}{" "}
                 <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>

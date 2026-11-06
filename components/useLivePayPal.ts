@@ -5,7 +5,8 @@
 // the PayPal window when a person has to approve, and keeps the signed ledger.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number; nonce: string };
+/** The run the server rebuilds: your rules ride along when you set them, and none means the defaults. */
+export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number; nonce: string; rules?: { budgetUsd: number; askAboveUsd: number } };
 
 export type LiveState =
   | "idle"
@@ -82,7 +83,7 @@ export function useLivePayPal(run: RunRef) {
   const ledger = useRef<string | undefined>(undefined);
   const busy = useRef(new Set<number>());
   const keyRef = useRef("");
-  const runKey = `${run.kind}:${run.id}:${run.seed}:${run.nonce}`;
+  const runKey = `${run.kind}:${run.id}:${run.seed}:${run.nonce}:${run.rules ? `${run.rules.budgetUsd}/${run.rules.askAboveUsd}` : ""}`;
   // Lines belong to one run: after a switch they read as empty immediately, not one render later.
   const lines = state.key === runKey ? state.lines : {};
 

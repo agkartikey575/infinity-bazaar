@@ -27,8 +27,8 @@ export type PayResult =
   | { decision: "declined"; guard: GuardDecision; ledger: Ledger; log: LogRow[] };
 
 export function rebuildRun(ref: RunRef): Run {
-  if (ref.kind === "mission") return buildMissionRun(ref.id, ref.seed);
-  return buildSingleRun(ref.id, ref.seed, ref.kind === "rogue");
+  if (ref.kind === "mission") return buildMissionRun(ref.id, ref.seed, ref.rules);
+  return buildSingleRun(ref.id, ref.seed, ref.kind === "rogue", ref.rules);
 }
 
 /**
@@ -62,22 +62,45 @@ const NO_SPEND = new Set(["declined", "blocked", "voided"]);
  * The browser holds the signed ledger, so it could send an older copy or none
  * at all. The server therefore never trusts a missing entry: every earlier line
  * with a deal counts as spent unless the ledger proves it ended without money
- * moving. If the whole run could ever exceed the budget, later lines count too,
- * so lines paid out of order can't slip past the budget either.
+ * moving. Later lines count only for money the ledger shows committed: in a run
+ * that could exceed the budget, pay() takes lines strictly in order (see
+ * mustGoInOrder), so a later line can't be paid first and leave too little here.
  */
 export function spentBefore(run: Run, line: number, ledger: Ledger): number {
-  const budget = toCents(run.lines[line].rules.budgetUsd);
-  const dealCents: number[] = run.lines.map((l) => (l.deal.outcome.status === "deal" && l.deal.outcome.amountToPay !== undefined ? toCents(l.deal.outcome.amountToPay) : 0));
-  const worstCase = dealCents.reduce((a, b) => a + b, 0) > budget;
+  const deals = dealCents(run);
   let cents = 0;
   run.lines.forEach((_, j) => {
     if (j === line) return;
     const e = ledger.entries[j];
     if (e && COMMITTED.has(e.state)) cents += e.amountCents;
     else if (e && NO_SPEND.has(e.state)) return;
-    else if (j < line || worstCase) cents += dealCents[j];
+    else if (j < line) cents += deals[j];
   });
   return cents;
+}
+
+const dealCents = (run: Run): number[] =>
+  run.lines.map((l) => (l.deal.outcome.status === "deal" && l.deal.outcome.amountToPay !== undefined ? toCents(l.deal.outcome.amountToPay) : 0));
+
+/**
+ * True when every deal in the run together costs more than the budget. Then the
+ * order matters: which items get money depends on what came before, so each line
+ * may be paid only once every earlier deal has settled in this ledger.
+ */
+export function mustGoInOrder(run: Run, line: number): boolean {
+  return dealCents(run).reduce((a, b) => a + b, 0) > toCents(run.lines[line].rules.budgetUsd);
+}
+
+const SETTLED = new Set(["authorized", "captured", "voided", "declined", "blocked"]);
+
+/** Every earlier line with a deal has a settled entry in the ledger. */
+export function earlierSettled(run: Run, line: number, ledger: Ledger): boolean {
+  return dealCents(run).every((cents, j) => j >= line || cents === 0 || SETTLED.has(ledger.entries[j]?.state ?? ""));
+}
+
+/** Refuses a first step on a line that has to wait for the lines before it. */
+function inOrder(run: Run, line: number, ledger: Ledger) {
+  if (mustGoInOrder(run, line) && !earlierSettled(run, line, ledger)) throw new Error(`line ${line} has to wait until the items before it are settled`);
 }
 
 /** AgentGuard, run on the server against the ledger. */
@@ -166,6 +189,7 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     if (url) return { decision: "needs_paypal_approval", guard, ledger, log: [], orderId: own.orderId, approveUrl: url };
   }
 
+  if (!own) inOrder(run, line, ledger);
   const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}`, tone: guard.decision === "approve" ? "ok" : guard.decision === "ask_user" ? "ask" : "bad" }];
   if (guard.decision === "block") {
     return { decision: "block", guard, ledger: transition(ledger, line, { state: "blocked", amountCents: amount }), log };
@@ -299,8 +323,10 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
  * declined line could be used to hide spending from AgentGuard.
  */
 export function declineLine(ref: RunRef, line: number, ledger: Ledger): Ledger {
-  const { guard, amount } = guardLine(rebuildRun(ref), line, ledger);
+  const run = rebuildRun(ref);
+  const { guard, amount } = guardLine(run, line, ledger);
   const own = ledger.entries[line];
+  if (!own) inOrder(run, line, ledger);
   const waitingOnYou = own ? own.state === "pending_approval" : guard.decision === "ask_user";
   if (!waitingOnYou) throw new Error(`line ${line} isn't waiting for your decision`);
   return decline(line, ledger, amount);

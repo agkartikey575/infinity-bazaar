@@ -4,6 +4,7 @@
 // voids free money for the lines that follow.
 import { capFor, checkPayment, createRng, getItem, getMission, missionRules, runDeal, runMission } from "../src/engine/index.ts";
 import type { Beat, BuyerPlan, DealResult, GuardDecision, GuardRules } from "../src/engine/index.ts";
+import type { PlayerRules } from "./rules.ts";
 
 export interface Line {
   itemId: string;
@@ -23,37 +24,65 @@ export interface Run {
   lines: Line[];
 }
 
-const SINGLE_RULES = { budgetUsd: 300, askAboveUsd: 100 };
+export const SINGLE_RULES: PlayerRules = { budgetUsd: 300, askAboveUsd: 100 };
 
-export function buildMissionRun(missionId: string, seed: number): Run {
+/** The budget and approval limit a run uses when you set none. */
+export function defaultRules(kind: Run["kind"], id: string): PlayerRules {
+  if (kind !== "mission") return SINGLE_RULES;
+  const m = getMission(id);
+  return { budgetUsd: m.budgetUsd, askAboveUsd: m.askAboveUsd };
+}
+
+/**
+ * AgentGuard's rules for one line with your budget and approval limit in place.
+ * The safety reserve keeps the same share of the budget, and an item's limit
+ * never goes above the budget. Deals are not touched: only what gets approved changes.
+ */
+export function withRules(base: GuardRules, defaults: PlayerRules, rules?: PlayerRules): GuardRules {
+  if (!rules) return base;
+  const out: GuardRules = { ...base, budgetUsd: rules.budgetUsd, askAboveUsd: rules.askAboveUsd };
+  if (base.reserveUsd) out.reserveUsd = Math.round((base.reserveUsd * rules.budgetUsd) / defaults.budgetUsd);
+  if (base.itemCapUsd !== undefined) out.itemCapUsd = Math.min(base.itemCapUsd, rules.budgetUsd);
+  return out;
+}
+
+/** The mission's own words, with your budget in place of its own. */
+const goalWithBudget = (goal: string, budget: number) => goal.replace(/Budget \$\d+/, `Budget $${budget}`);
+
+export function buildMissionRun(missionId: string, seed: number, rules?: PlayerRules): Run {
   const mission = getMission(missionId);
+  const defaults = defaultRules("mission", missionId);
+  const chosen = rules ?? defaults;
+  // Deals are negotiated exactly as with the mission's own rules: same table, same deals.
   const result = runMission(missionId, { seed });
   return {
     kind: "mission",
     title: mission.title,
-    goal: mission.goal,
-    budgetUsd: mission.budgetUsd,
-    askAboveUsd: mission.askAboveUsd,
+    goal: rules ? goalWithBudget(mission.goal, chosen.budgetUsd) : mission.goal,
+    budgetUsd: chosen.budgetUsd,
+    askAboveUsd: chosen.askAboveUsd,
     seed,
-    lines: result.lines.map((l) => ({ itemId: l.itemId, itemName: l.itemName, itemCapUsd: l.itemCapUsd, rules: missionRules(mission, l.itemCapUsd), deal: l.deal })),
+    lines: result.lines.map((l) => ({ itemId: l.itemId, itemName: l.itemName, itemCapUsd: l.itemCapUsd, rules: withRules(missionRules(mission, l.itemCapUsd), defaults, rules), deal: l.deal })),
   };
 }
 
-export function buildSingleRun(itemId: string, seed: number, rogue = false): Run {
+export function buildSingleRun(itemId: string, seed: number, rogue = false, rules?: PlayerRules): Run {
   const item = getItem(itemId);
   const mission = getMission("hackathon-10-days");
   const suggested = mission.suggested.find((s) => s.item === itemId)?.itemCapUsd;
   const cap = rogue ? 70 : capFor(mission, suggested ?? item.price.high, 0);
   const deal = runDeal(itemId, { seed, itemCapUsd: cap, rogue });
+  const chosen = rules ?? SINGLE_RULES;
   return {
     kind: rogue ? "rogue" : "single",
     title: rogue ? "Rogue agent demo" : item.name,
     goal: rogue
-      ? `Get me the best possible ${item.phrase.replace(/^an? /, "")}. Cap $${cap}, ask me above $${SINGLE_RULES.askAboveUsd}.`
+      ? `Get me the best possible ${item.phrase.replace(/^an? /, "")}. Cap $${cap}, ask me above $${chosen.askAboveUsd}.`
       : `${item.delivery === "service" ? "Hire" : "Buy"} ${item.phrase} (${item.unit}) at a good price.`,
-    ...SINGLE_RULES,
+    budgetUsd: chosen.budgetUsd,
+    askAboveUsd: chosen.askAboveUsd,
     seed,
-    lines: [{ itemId, itemName: item.name, itemCapUsd: cap, rules: { ...SINGLE_RULES, itemCapUsd: cap }, deal }],
+    lines: [{ itemId, itemName: item.name, itemCapUsd: cap, rules: withRules({ ...SINGLE_RULES, itemCapUsd: cap }, SINGLE_RULES, rules), deal }],
   };
 }
 

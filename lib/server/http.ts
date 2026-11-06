@@ -3,12 +3,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { readLedger, readValue, signLedger, type Ledger, type RunRef } from "./ledger.ts";
 import { configFromEnv, PayPalClient, PayPalError } from "./paypal.ts";
-import { checkOrigin, HttpError } from "./request.ts";
+import { checkOrigin, HttpError, readRunRef } from "./request.ts";
 
 export { checkOrigin, HttpError };
 
-const KINDS = new Set(["mission", "single", "rogue"]);
-const NONCE = /^[a-z0-9]{8,40}$/;
 export const VAULT_COOKIE = "ib_vault";
 export const SETUP_COOKIE = "ib_setup";
 
@@ -39,11 +37,8 @@ export async function readBody(req: NextRequest): Promise<AgentBody> {
     throw new HttpError(400, "The request body is not valid JSON.");
   }
   if (body?.ledger !== undefined && body.ledger !== null && typeof body.ledger !== "string") throw new HttpError(400, "Invalid ledger.");
-  const run = body?.run;
-  if (!run || !KINDS.has(run.kind) || typeof run.id !== "string" || !Number.isSafeInteger(run.seed) || run.seed < 1 || run.seed > 999_999_999) throw new HttpError(400, "Invalid run.");
-  if (typeof run.nonce !== "string" || !NONCE.test(run.nonce)) throw new HttpError(400, "Invalid run nonce.");
+  const ref = readRunRef(body?.run);
   if (!Number.isInteger(body.line) || (body.line as number) < 0) throw new HttpError(400, "Invalid line.");
-  const ref: RunRef = { kind: run.kind, id: run.id, seed: run.seed, nonce: run.nonce };
   const ledger = readLedger(body.ledger, ref);
   if (!ledger) throw new HttpError(400, "The payment ledger was changed or belongs to another run.");
   return { run: ref, line: body.line as number, ledger, userApproved: body.userApproved === true };

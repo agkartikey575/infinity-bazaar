@@ -4,12 +4,18 @@
 // What it guarantees: amounts, lines and states can't be edited, and a ledger
 // can't be moved to another run. What it doesn't: an older copy of the same
 // run's ledger can be sent again. That can't overspend: per-line PayPal request
-// and invoice ids stop any line being paid twice, and the server counts every
-// line the ledger doesn't prove unpaid as spent (see spentBefore in agent.ts).
+// and invoice ids stop any line being paid twice, the server counts every
+// earlier line the ledger doesn't prove unpaid as spent, and when a run's deals
+// together cost more than its budget, lines are taken strictly in order (see
+// spentBefore and mustGoInOrder in agent.ts).
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { sameRules, type PlayerRules } from "../rules.ts";
 
-/** A run is a deterministic table plus a random nonce chosen each time you press Play. */
-export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number; nonce: string };
+/**
+ * A run is a deterministic deal plus a random nonce chosen each time you press Play,
+ * and your own budget and approval limit when you set them (none means the defaults).
+ */
+export type RunRef = { kind: "mission" | "single" | "rogue"; id: string; seed: number; nonce: string; rules?: PlayerRules };
 
 export type EntryState = "pending_approval" | "authorized" | "captured" | "voided" | "declined" | "blocked";
 
@@ -88,7 +94,8 @@ export function readLedger(token: string | undefined | null, run: RunRef, secret
   } catch {
     return null;
   }
-  const match = l.run.kind === run.kind && l.run.id === run.id && l.run.seed === run.seed && l.run.nonce === run.nonce;
+  // The rules are part of the run: a ledger signed under one budget can't be used under another.
+  const match = l.run.kind === run.kind && l.run.id === run.id && l.run.seed === run.seed && l.run.nonce === run.nonce && sameRules(l.run.rules, run.rules);
   return match ? l : null;
 }
 

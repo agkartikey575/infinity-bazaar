@@ -42,7 +42,7 @@ const skip = async (page) => {
   await btn(page, /Skip/).click();
   await page.waitForTimeout(250);
 };
-/** Picks a table by typing in the "Table #" input and pressing Enter. */
+/** Picks a deal by typing in the "Deal #" input and pressing Enter. */
 async function table(page, seed) {
   await page.locator("#seed").fill(String(seed));
   await page.locator("#seed").press("Enter");
@@ -72,8 +72,8 @@ async function checkSheet(page, viewport) {
 
 // Expected outcomes come from the engine itself, so this test follows engine changes.
 const LABEL = { captured: "Paid", declined: "Declined", voided: "Hold released", blocked: "Blocked", "no-deal": "Walked away" };
-function expected(seed, answer) {
-  const run = buildMissionRun("hackathon-10-days", seed);
+function expected(seed, answer, rules) {
+  const run = buildMissionRun("hackathon-10-days", seed, rules);
   const decisions = {};
   for (;;) {
     const r = buildSteps(run, decisions);
@@ -158,7 +158,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
   });
 
-  await check(`${w}px: rogue agent is blocked before PayPal, New table stays rogue`, viewport, async (page) => {
+  await check(`${w}px: rogue agent is blocked before PayPal, New deal stays rogue`, viewport, async (page) => {
     await btn(page, /rogue/i).click();
     await skip(page);
     assert.deepEqual(await pills(page), ["Blocked"]);
@@ -170,9 +170,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await page.locator(".gate .lamp.on").innerText(), /Block/, "gate shows the block state");
     assert.doesNotMatch(await page.locator(".checkout").innerText(), /POST |PayPal order|Paid \$/);
     assert.match(await bnums(page), /Paid \$0/);
-    await btn(page, /New table/).click();
+    await btn(page, /New deal/).click();
     await skip(page);
-    assert.deepEqual(await pills(page), ["Blocked"], "New table keeps rogue mode");
+    assert.deepEqual(await pills(page), ["Blocked"], "New deal keeps rogue mode");
   });
 
   await check(`${w}px: single items play without broken text`, viewport, async (page) => {
@@ -186,7 +186,59 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       if (!/^Paid$/.test(pill)) assert.equal((await amounts(page))[0], "—", `${id}: no amount on ${pill}`);
     }
   });
+
+  await check(`${w}px: your rules (budget $120, ask above $40) on deal 42 decide what's paid`, viewport, async (page) => {
+    const rules = { budgetUsd: 120, askAboveUsd: 40 };
+    const exp = expected(42, "approved", rules);
+    assert.notDeepEqual(exp.pills, expected(42, "approved").pills, "these rules change the outcome");
+    assert.equal(await page.locator("#budget").inputValue(), "300", "prefilled with the mission's budget");
+    assert.equal(await page.locator("#ask").inputValue(), "100", "prefilled with the mission's approval limit");
+    await page.selectOption("#speed", "4");
+    await page.locator("#budget").fill("120");
+    await page.locator("#ask").fill("40");
+    await page.locator("#ask").press("Enter");
+    await page.waitForTimeout(200);
+    assert.match(await page.locator(".goal").innerText(), /Budget \$120\./, "the mission quote shows your budget");
+    assert.match(await bnums(page), /Budget \$120\b/);
+    assert.match(await page.locator(".pc.limit").innerText(), /of \$120 budget/);
+    assert.match(await page.locator(".bask").getAttribute("title"), /\$40/);
+    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent can likely afford \d of 3 items · anything over \$40 asks you first/);
+    assert.equal(new URL(page.url()).search, "?deal=42&budget=120&ask=40", "the link carries the deal and your rules");
+    await playToEnd(page, "approved");
+    assert.deepEqual(await pills(page), exp.pills, "statuses match the engine under your rules");
+    assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
+    assert.match(await page.locator(".receipt").innerText(), new RegExp(`Paid \\$${exp.paid} of \\$120`));
+  });
 }
+
+await check("390px: a limit above the budget is clamped with a short note, and Reset goes back", { width: 390, height: 844 }, async (page) => {
+  await page.locator("#budget").fill("120");
+  await page.locator("#ask").fill("200");
+  await page.locator("#ask").press("Enter");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#ask").inputValue(), "120");
+  assert.match(await page.locator("#rules-preview").innerText(), /Approval limit can't be above your budget/);
+  await page.locator("#ask").press("ArrowDown");
+  assert.equal(await page.locator("#ask").inputValue(), "115", "arrow keys step the field");
+  await btn(page, "Reset").click();
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#budget").inputValue(), "300");
+  assert.equal(await page.locator("#ask").inputValue(), "100");
+  assert.match(await page.locator(".goal").innerText(), /Budget \$300\./);
+});
+
+await check("1440px: a shared link sets the deal and rules; bad values fall back", { width: 1440, height: 900 }, async (page) => {
+  await page.goto(`${BASE_URL}/?deal=7&budget=150&ask=60`, { waitUntil: "networkidle" });
+  assert.equal(await page.locator("#seed").inputValue(), "7");
+  assert.equal(await page.locator("#budget").inputValue(), "150");
+  assert.equal(await page.locator("#ask").inputValue(), "60");
+  assert.match(await page.locator(".goal-box .note").innerText(), /Deal #7 always replays the same deal\./);
+  await page.goto(`${BASE_URL}/?deal=abc&budget=5&ask=900`, { waitUntil: "networkidle" });
+  assert.equal(await page.locator("#seed").inputValue(), "42");
+  assert.equal(await page.locator("#budget").inputValue(), "300");
+  assert.equal(await page.locator("#ask").inputValue(), "100");
+  assert.equal(new URL(page.url()).search, "", "the default deal keeps a clean address");
+});
 
 await check("1440px: all three booths show a one-on-one chat after Skip", { width: 1440, height: 900 }, async (page) => {
   await skip(page);
