@@ -53,7 +53,34 @@ const table = async (n) => {
   await page.locator("#seed").press("Enter");
 };
 
+
+// A "camera" that follows the action: the chats and commentary while sellers
+// talk, the AgentGuard check and PayPal panel when a payment decision lands.
+const installCamera = () =>
+  page.evaluate(() => {
+    if (window.__cam) return;
+    window.__cam = "auto";
+    let last = "", until = 0;
+    const decisive = /Approved\.|Blocked because|Needs your OK|Paid \$|held by PayPal|Delivered|released|order created|Waiting for your approval|declined/;
+    setInterval(() => {
+      const mode = window.__cam, y = window.scrollY;
+      const go = (top) => { top = Math.max(0, Math.round(top)); if (Math.abs(top - y) > 40) window.scrollTo({ top, behavior: "smooth" }); };
+      const at = (el, off) => el && go(el.getBoundingClientRect().top + window.scrollY - off);
+      if (mode === "off") return;
+      if (mode === "top") return go(0);
+      if (mode === "receipt") return at(document.querySelector(".receipt"), 140);
+      if (document.querySelector("[role=dialog]")) return;
+      const gate = document.querySelector(".gate"), pay = document.querySelector(".paypal");
+      const text = (gate?.innerText ?? "") + "|" + (pay?.innerText ?? "");
+      if (text !== last) { if (decisive.test(text)) until = Date.now() + 4000; last = text; }
+      if (Date.now() < until) return at(gate ?? pay, 60);
+      at(document.querySelector(".arena"), 8);
+    }, 500);
+  });
+const cam = (mode) => page.evaluate((m) => (window.__cam = m), mode);
 await page.goto(BASE_URL, { waitUntil: "networkidle" });
+await installCamera();
+await cam("top");
 await wait(1500);
 
 // 1. Intro: the mission card.
@@ -62,12 +89,13 @@ await wait(14000);
 
 // 2–3. Haggling on table 42, then the first deal and AgentGuard.
 mark("haggle");
+await cam("auto");
 await page.selectOption("#speed", "2");
 await btn(/^(Play|Replay)$/).first().click();
 await page.getByText("Hidden fee spotted", { exact: false }).first().waitFor({ timeout: 90_000 }).catch(() => undefined);
 await wait(6000);
 await page.getByText("Approved. It fits your budget", { exact: false }).first().waitFor({ timeout: 120_000 }).catch(() => undefined);
-await scrollTo(".gate, .paypal");
+
 await wait(5000);
 mark("haggle-end");
 
@@ -75,14 +103,14 @@ mark("haggle-end");
 if (LIVE) {
   const { loginInPayPal, PAY_BUTTON } = await import("../tests/e2e/paypal-helpers.mjs");
   mark("paypal");
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  await cam("top"); await wait(600); await cam("auto");
   await page.getByLabel(/PayPal (\(sandbox\)|sandbox)/i).check();
   await page.locator("#selection").selectOption("item:usb-mic");
   await table(1);
   await page.selectOption("#speed", "4");
   const pay = btn("Pay with PayPal");
   await pay.waitFor({ timeout: 120_000 });
-  await scrollTo("#pay-with-paypal");
+  
   await wait(1500);
   const [popup] = await Promise.all([page.waitForEvent("popup"), pay.click()]);
   mark("paypal-window");
@@ -98,7 +126,7 @@ if (LIVE) {
   mark("paypal-back");
   await page.locator(".list .pill", { hasText: /Paid|Hold released/ }).first().waitFor({ timeout: 120_000 });
   await page.getByLabel("Show PayPal details").check();
-  await scrollTo(".paypal");
+  await wait(500);
   await wait(7000);
   mark("paypal-end");
   await page.getByLabel(/PayPal (\(sandbox\)|sandbox)/i).uncheck();
@@ -106,7 +134,7 @@ if (LIVE) {
 
 // 6. Above the approval line, the agent asks first.
 mark("ask");
-await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+await cam("top"); await wait(600); await cam("auto");
 await page.locator("#selection").selectOption("mission:hackathon-10-days");
 await table(7);
 await page.selectOption("#speed", "4");
@@ -122,20 +150,20 @@ mark("ask-end");
 
 // 7. The rogue agent: talked into a $140 upsell, stopped by AgentGuard.
 mark("rogue");
-await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+await cam("top"); await wait(600); await cam("auto");
 await btn("Agent goes rogue").click();
 await page.selectOption("#speed", "2");
 await page.getByText("Nothing was sent to PayPal", { exact: false }).first().waitFor({ timeout: 120_000 }).catch(() => undefined);
 await wait(1500);
-await scrollTo(".gate");
+
 await wait(7000);
 mark("rogue-end");
 
 // 8. Receipt and close.
 mark("outro");
-await scrollTo(".receipt");
+await cam("receipt");
 await wait(4000);
-await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+await cam("top"); await wait(600); await cam("auto");
 await wait(5000);
 mark("outro-end");
 
