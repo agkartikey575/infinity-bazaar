@@ -21,10 +21,29 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: SIZE, recordVideo: { dir: OUT, size: SIZE }, colorScheme: "light" });
+// Blur any email address shown in the PayPal window, so the sandbox login never appears on screen.
+await ctx.addInitScript(() => {
+  if (!/paypal\.com$/.test(location.hostname)) return;
+  const css = "#email, [data-testid*='email' i], .blurred-email { filter: blur(6px) !important; }";
+  const hide = () => {
+    if (!document.head) return;
+    if (!document.getElementById("demo-blur")) {
+      const st = document.createElement("style");
+      st.id = "demo-blur";
+      st.textContent = css;
+      document.head.appendChild(st);
+    }
+    const walk = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (/\S+@\S+/.test(n.nodeValue) && n.parentElement) n.parentElement.classList.add("blurred-email");
+  };
+  new MutationObserver(hide).observe(document, { childList: true, subtree: true, characterData: true });
+  document.addEventListener("DOMContentLoaded", hide);
+});
 const t0 = Date.now();
 const page = await ctx.newPage();
 const marks = [];
 let popupVideo = null;
+let popupBox = null;
 const mark = (name) => marks.push({ name, t: (Date.now() - t0) / 1000 });
 const wait = (ms) => page.waitForTimeout(ms);
 const btn = (name) => page.getByRole("button", { name, exact: typeof name === "string" });
@@ -54,7 +73,7 @@ mark("haggle-end");
 
 // 4–5. Real PayPal: a shipped item is held, then paid on delivery.
 if (LIVE) {
-  const { approveInPayPal } = await import("../tests/e2e/paypal-helpers.mjs");
+  const { loginInPayPal, PAY_BUTTON } = await import("../tests/e2e/paypal-helpers.mjs");
   mark("paypal");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   await page.getByLabel(/PayPal (\(sandbox\)|sandbox)/i).check();
@@ -68,7 +87,14 @@ if (LIVE) {
   const [popup] = await Promise.all([page.waitForEvent("popup"), pay.click()]);
   mark("paypal-window");
   popupVideo = popup.video();
-  await approveInPayPal(popup);
+  // Same steps as approveInPayPal, paced so each PayPal screen can be read.
+  await loginInPayPal(popup);
+  popupBox = await popup.evaluate(() => [window.innerWidth, window.innerHeight]).catch(() => null);
+  const payNow = popup.locator(PAY_BUTTON).first();
+  await payNow.waitFor({ state: "visible", timeout: 45_000 });
+  await popup.waitForTimeout(4000);
+  await payNow.click();
+  await popup.waitForEvent("close", { timeout: 45_000 }).catch(() => undefined);
   mark("paypal-back");
   await page.locator(".list .pill", { hasText: /Paid|Hold released/ }).first().waitFor({ timeout: 120_000 });
   await page.getByLabel("Show PayPal details").check();
@@ -89,9 +115,9 @@ for (let i = 0; i < 20 && !(await page.getByRole("dialog").count()); i++) {
   if (await skip.isEnabled()) await skip.click();
   await wait(700);
 }
-await wait(4000);
+await wait(9000);
 await btn(/^Approve/).click();
-await wait(2500);
+await wait(4000);
 mark("ask-end");
 
 // 7. The rogue agent: talked into a $140 upsell, stopped by AgentGuard.
@@ -140,7 +166,9 @@ plan.forEach(([a, b, target], i) => {
   const len = end - start;
   const speed = Math.max(1, len / target);
   const out = path.join(OUT, `part-${i}.mp4`);
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(start), "-t", String(len), "-i", src, "-vf", `setpts=PTS/${speed.toFixed(3)},fps=30`, "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", out]);
+  // The PayPal window is smaller than the recording: crop to it, scale it up and center it.
+  const frame = isPopup && popupBox ? `crop=${popupBox[0]}:${popupBox[1]}:0:0,scale=-2:${SIZE.height},pad=${SIZE.width}:${SIZE.height}:(ow-iw)/2:0:color=0xe8edf5,` : "";
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(start), "-t", String(len), "-i", src, "-vf", `${frame}setpts=PTS/${speed.toFixed(3)},fps=30`, "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", out]);
   parts.push(out);
   console.log(`${a}: ${len.toFixed(1)}s -> ${(len / speed).toFixed(1)}s (x${speed.toFixed(2)})`);
 });

@@ -44,7 +44,7 @@ export function findTable(want) {
   throw new Error(`no table for ${want}`);
 }
 
-const PAY_BUTTON = "#payment-submit-btn, button:has-text('Complete Purchase'), button:has-text('Pay Now'), button:has-text('Continue to Review Order'), button:has-text('Agree & Continue'), button:has-text('Agree and Continue'), #consentButton, button:has-text('Save and Continue'), button:has-text('Continue')";
+export const PAY_BUTTON = "#payment-submit-btn, button:has-text('Complete Purchase'), button:has-text('Pay Now'), button:has-text('Continue to Review Order'), button:has-text('Agree & Continue'), button:has-text('Agree and Continue'), #consentButton, button:has-text('Save and Continue'), button:has-text('Continue')";
 
 /** Waits for PayPal to load in the window (it may open blank first), then logs in if asked. */
 export async function loginInPayPal(popup) {
