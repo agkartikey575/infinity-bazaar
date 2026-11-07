@@ -202,7 +202,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await bnums(page), /Budget \$120\b/);
     assert.match(await page.locator(".pc.limit").innerText(), /of \$120 budget/);
     assert.match(await page.locator(".bask").getAttribute("title"), /\$40/);
-    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent can likely afford \d of 3 items · anything over \$40 asks you first/);
+    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent usually affords 2 of 3 items · anything over \$40 asks you first/);
     assert.equal(new URL(page.url()).search, "?deal=42&budget=120&ask=40", "the link carries the deal and your rules");
     await playToEnd(page, "approved");
     assert.deepEqual(await pills(page), exp.pills, "statuses match the engine under your rules");
@@ -225,6 +225,25 @@ await check("390px: a limit above the budget is clamped with a short note, and R
   assert.equal(await page.locator("#budget").inputValue(), "300");
   assert.equal(await page.locator("#ask").inputValue(), "100");
   assert.match(await page.locator(".goal").innerText(), /Budget \$300\./);
+});
+
+await check("390px: decimals round to whole dollars, letters are refused, money has commas", { width: 390, height: 844 }, async (page) => {
+  await page.locator("#budget").fill("150.5");
+  await page.locator("#budget").press("Enter");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#budget").inputValue(), "151");
+  assert.match(await page.locator("#rules-preview").innerText(), /Rounded to whole dollars/);
+  await page.locator("#budget").fill("abc");
+  await page.locator("#budget").press("Enter");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator("#budget").inputValue(), "151", "letters keep the budget in force");
+  assert.match(await page.locator("#rules-preview").innerText(), /Use whole dollars/);
+  await page.locator("#budget").fill("1000");
+  await page.locator("#budget").press("Enter");
+  await page.waitForTimeout(200);
+  assert.match(await bnums(page), /Budget \$1,000\b/);
+  assert.match(await page.locator(".goal").innerText(), /Budget \$1,000\./);
+  assert.match(await page.locator("#selection option:checked").innerText(), /\(\$1,000\)/, "the mission option shows your budget");
 });
 
 await check("1440px: a shared link sets the deal and rules; bad values fall back", { width: 1440, height: 900 }, async (page) => {

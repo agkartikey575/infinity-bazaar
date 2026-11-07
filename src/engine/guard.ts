@@ -44,7 +44,7 @@ export interface PaymentRequest {
 }
 
 /** Whole dollars read as "$47", anything else as "$19.99". */
-const usd = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 /** Money compared in whole cents, so 0.1 + 0.2 never reads as over a limit. */
 const c = (n: number) => Math.round(n * 100);

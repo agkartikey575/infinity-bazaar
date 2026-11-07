@@ -47,7 +47,7 @@ export function withRules(base: GuardRules, defaults: PlayerRules, rules?: Playe
 }
 
 /** The mission's own words, with your budget in place of its own. */
-const goalWithBudget = (goal: string, budget: number) => goal.replace(/Budget \$\d+/, `Budget $${budget}`);
+const goalWithBudget = (goal: string, budget: number) => goal.replace(/Budget \$\d+/, `Budget $${budget.toLocaleString("en-US")}`);
 
 export function buildMissionRun(missionId: string, seed: number, rules?: PlayerRules): Run {
   const mission = getMission(missionId);
@@ -105,7 +105,7 @@ function paypalId(seed: number, line: number, salt: number): string {
   return Array.from({ length: 17 }, () => chars[Math.floor(rng.next() * chars.length)]).join("");
 }
 
-const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 /** How a delivery is announced, by kind of item. */
 function deliveredText(delivery: string, group: string, seller: string): string {

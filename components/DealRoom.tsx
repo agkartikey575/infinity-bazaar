@@ -14,7 +14,7 @@ import {
   type Run,
   type Step,
 } from "../lib/timeline.ts";
-import { ASK_MAX, ASK_MIN, BUDGET_MAX, BUDGET_MIN, clampRules, rulesFromQuery, rulesPreview, sameRules, type PlayerRules } from "../lib/rules.ts";
+import { ASK_MAX, ASK_MIN, BUDGET_MAX, BUDGET_MIN, clampDraft, fmt, rulesFromQuery, rulesPreview, sameRules, type PlayerRules } from "../lib/rules.ts";
 import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 import { useVoices, type LineVoices } from "./useVoices.ts";
 import { Arena, Caption, Gate } from "./Arena.tsx";
@@ -35,7 +35,8 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   voided: "Hold released",
 };
 
-const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+/** Dollars with thousands commas, as everywhere in the room. */
+const money = fmt;
 
 /** The same steps with each beat's text swapped for its line's live voice, when it has one. */
 function voiceSteps(steps: Step[], applied: (LineVoices | null)[]): Step[] {
@@ -71,6 +72,8 @@ const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 function Stepper(props: {
   id: string;
   label: string;
+  /** Shorter label for narrow screens, where "$" shows inside the field instead. */
+  short: string;
   name: string;
   value: string;
   min: number;
@@ -79,7 +82,7 @@ function Stepper(props: {
   onChange: (v: string) => void;
   onEnter: () => void;
 }) {
-  const { id, label, name, value, min, max, step, onChange, onEnter } = props;
+  const { id, label, short, name, value, min, max, step, onChange, onEnter } = props;
   const now = num(value);
   const bump = (dir: 1 | -1) => {
     const base = Number.isFinite(now) ? now : min;
@@ -94,23 +97,27 @@ function Stepper(props: {
   return (
     <div className="field stepper-field">
       <label className="label" htmlFor={id}>
-        {label}
+        <span className="label-long">{label}</span>
+        <span className="label-short">{short}</span>
       </label>
       <div className="stepper">
         <button type="button" tabIndex={-1} aria-label={`Lower ${name} by $${step}`} onMouseDown={keepFocus} onClick={() => bump(-1)} disabled={Number.isFinite(now) && now <= min}>
           −
         </button>
+        <span className="cur" aria-hidden="true">
+          $
+        </span>
         <input
           id={id}
           role="spinbutton"
-          inputMode="numeric"
+          inputMode="decimal"
           autoComplete="off"
           value={value}
           aria-valuemin={min}
           aria-valuemax={max}
           aria-valuenow={Number.isFinite(now) ? now : undefined}
           aria-describedby="rules-preview"
-          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+          onChange={(e) => onChange(e.target.value.slice(0, 9))}
           onKeyDown={(e) => {
             if (e.key === "Enter") onEnter();
             else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -319,7 +326,7 @@ export default function DealRoom() {
   const gate = gateAt(cursor);
   /** Earlier lines AgentGuard blocked on screen that the server hasn't recorded yet. */
   const unreported = (line: number) =>
-    steps.filter((s) => s.type === "guard" && s.line < line && s.guard.decision === "block" && ["idle", "working"].includes(live.lines[s.line]?.state ?? "idle")).map((s) => s.line);
+    steps.filter((s) => s.type === "guard" && s.line < line && s.guard.decision === "block" && ["idle", "working", "error"].includes(live.lines[s.line]?.state ?? "idle")).map((s) => s.line);
 
   useEffect(() => {
     if (!playing || !gate || gate.ready) return;
@@ -332,7 +339,9 @@ export default function DealRoom() {
     // The server takes lines in order: first let it record any earlier line AgentGuard blocked.
     const before = unreported(gate.line);
     if (before.length) {
-      for (const k of before) if ((live.lines[k]?.state ?? "idle") === "idle") live.pay(k, false);
+      // One at a time, oldest first, so each report carries the ledger the one before returned.
+      // A report that failed waits for Retry (shown in the Payment panel).
+      if ((live.lines[before[0]]?.state ?? "idle") === "idle") live.pay(before[0], false);
       return;
     }
     if (gate.action === "pay") {
@@ -461,7 +470,7 @@ export default function DealRoom() {
   };
 
   /** The rules the fields ask for, made valid, with a note when something had to change. */
-  const draftRules = (fallback: PlayerRules) => clampRules(num(budgetDraft), num(askDraft), fallback);
+  const draftRules = (fallback: PlayerRules) => clampDraft(budgetDraft, askDraft, fallback);
   const rulesChanged = () => !sameRules(draftRules(applied).rules, applied);
 
   /**
@@ -509,9 +518,11 @@ export default function DealRoom() {
     setBudgetDraft(String(defaults.budgetUsd));
     setAskDraft(String(defaults.askAboveUsd));
   };
+  /** An earlier blocked line whose report to the server failed; Retry sends it again. */
+  const stuckReport = live.enabled ? unreported(run.lines.length).find((i) => i !== view.line && live.lines[i]?.state === "error") : undefined;
   const previewRules = draftRules(applied).rules;
   const k = runKind(selection, rogue);
-  const preview = rulesPreview(k.kind, k.id, previewRules, k.kind === "mission" ? undefined : Math.min(run.lines[0].itemCapUsd, previewRules.budgetUsd));
+  const preview = useMemo(() => rulesPreview(k.kind, k.id, previewRules), [k.kind, k.id, previewRules.budgetUsd, previewRules.askAboveUsd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decide = (d: Decision) => {
     if (waitingFor === null) return;
@@ -591,7 +602,7 @@ export default function DealRoom() {
               <optgroup label="Missions">
                 {missions.map((m) => (
                   <option key={m.id} value={`mission:${m.id}`}>
-                    {m.title} (${m.budgetUsd})
+                    {m.title} ({money(rules && !rogue && selection === `mission:${m.id}` ? rules.budgetUsd : m.budgetUsd)})
                   </option>
                 ))}
               </optgroup>
@@ -629,8 +640,8 @@ export default function DealRoom() {
           >
             <legend className="sr-only">Your rules</legend>
             <div className="rules-row">
-              <Stepper id="budget" label="Budget ($)" name="budget" value={budgetDraft} min={BUDGET_MIN} max={BUDGET_MAX} step={10} onChange={(v) => { setBudgetDraft(v); setRulesNote(null); }} onEnter={applyRules} />
-              <Stepper id="ask" label="Ask me above ($)" name="approval limit" value={askDraft} min={ASK_MIN} max={ASK_MAX} step={5} onChange={(v) => { setAskDraft(v); setRulesNote(null); }} onEnter={applyRules} />
+              <Stepper id="budget" label="Budget ($)" short="Budget" name="budget" value={budgetDraft} min={BUDGET_MIN} max={BUDGET_MAX} step={10} onChange={(v) => { setBudgetDraft(v); setRulesNote(null); }} onEnter={applyRules} />
+              <Stepper id="ask" label="Ask me above ($)" short="Ask above" name="approval limit" value={askDraft} min={ASK_MIN} max={ASK_MAX} step={5} onChange={(v) => { setAskDraft(v); setRulesNote(null); }} onEnter={applyRules} />
               <button type="button" className="link" onClick={resetRules} disabled={!rules && !rulesChanged() && !rulesNote}>
                 Reset
               </button>
@@ -715,25 +726,25 @@ export default function DealRoom() {
           <div className="budget">
             <span className="label">Budget</span>
             <div className="bbar">
-              <span className="sr-only">Spent ${view.committedUsd} of ${run.budgetUsd}</span>
+              <span className="sr-only">Spent {money(view.committedUsd)} of {money(run.budgetUsd)}</span>
               <div className="bfill" style={{ transform: `scaleX(${capturedShare / 100})` }} />
               <div className="bheld" style={{ transform: `translateX(${capturedShare}%) scaleX(${heldShare / 100})` }} />
               <div className="bpending" style={{ transform: `translateX(${capturedShare + heldShare}%) scaleX(${pendingShare / 100})` }} />
-              <div className="bask" style={{ left: `${askLine}%` }} title={`Approval needed above $${run.askAboveUsd}`} />
+              <div className="bask" style={{ left: `${askLine}%` }} title={`Approval needed above ${money(run.askAboveUsd)}`} />
             </div>
             <div className="bnums">
               <span>
-                <i className="dot paid" /> Paid ${view.capturedUsd}
+                <i className="dot paid" /> Paid {money(view.capturedUsd)}
               </span>
               <span>
-                <i className="dot held" /> Held ${view.committedUsd - view.capturedUsd}
+                <i className="dot held" /> Held {money(view.committedUsd - view.capturedUsd)}
               </span>
               {view.pendingUsd > 0 && (
                 <span>
-                  <i className="dot pending" /> Waiting ${view.pendingUsd}
+                  <i className="dot pending" /> Waiting {money(view.pendingUsd)}
                 </span>
               )}
-              <span>Budget ${run.budgetUsd}</span>
+              <span>Budget {money(run.budgetUsd)}</span>
             </div>
           </div>
         </div>
@@ -847,6 +858,13 @@ export default function DealRoom() {
                 <button onClick={() => live.retry(view.line)}>Retry</button>
               </div>
             )}
+            {stuckReport !== undefined && (
+              <div className="row-bad">
+                We couldn&apos;t confirm with our server that {run.lines[stuckReport].itemName} was blocked, so the next payment waits.{" "}
+                {showDetails && <span className="row-detail">{live.lines[stuckReport]?.error}</span>}{" "}
+                <button onClick={() => live.retry(stuckReport)}>Retry</button>
+              </div>
+            )}
             <span className="note">
               {live.enabled
                 ? live.status.wallet
@@ -864,7 +882,7 @@ export default function DealRoom() {
               <div key={l.itemId + i} className={`row${i === view.line && !finished ? " current" : ""}`}>
                 <span className="row-name">{l.itemName}</span>
                 <span className={`pill ${view.statuses[i]}`}>{STATUS_LABEL[view.statuses[i]]}</span>
-                <b>{view.amounts[i] !== null ? `$${view.amounts[i]}` : "—"}</b>
+                <b>{view.amounts[i] !== null ? money(view.amounts[i]!) : "—"}</b>
               </div>
             ))}
           </div>

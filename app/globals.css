@@ -310,6 +310,7 @@ button.link { border: 0; background: none; padding: 9px 2px; color: var(--brass)
 button.link:disabled { color: var(--muted); text-decoration: none; }
 .rules-preview { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 .rules-note { color: var(--rose); font-weight: 600; }
+.label-short, .stepper .cur { display: none; }
 .pc-sub { font: 11px var(--mono); color: var(--muted); }
 .pc.limit b { color: var(--ink); }
 .setup { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
@@ -320,4 +321,8 @@ button.link:disabled { color: var(--muted); text-decoration: none; }
   .stepper-field { flex: 1 1 0; }
   .stepper input { width: 100%; min-width: 2.6em; flex: 1 1 auto; }
   .stepper button { padding: 0 9px; }
+  .label-long { display: none; }
+  .label-short { display: inline; }
+  .stepper .cur { display: flex; align-items: center; padding-left: 2px; margin-right: -2px; color: var(--muted); font: 600 14px var(--body); }
+  .stepper input { text-align: left; }
 }

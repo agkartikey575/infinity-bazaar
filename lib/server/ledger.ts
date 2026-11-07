@@ -1,13 +1,24 @@
 // The payment ledger for one run, signed by the server so the browser can hold
 // it without being able to change it. Works on serverless hosts with no database.
 //
-// What it guarantees: amounts, lines and states can't be edited, and a ledger
-// can't be moved to another run. What it doesn't: an older copy of the same
-// run's ledger can be sent again. That can't overspend: per-line PayPal request
-// and invoice ids stop any line being paid twice, the server counts every
-// earlier line the ledger doesn't prove unpaid as spent, and when a run's deals
-// together cost more than its budget, lines are taken strictly in order (see
-// spentBefore and mustGoInOrder in agent.ts).
+// What it guarantees: amounts, lines, states and your rules can't be edited,
+// and a ledger can't be moved to another run or to other rules.
+//
+// What it doesn't: an older copy of the same run's ledger can be sent again.
+// With PayPal configured, that can't overspend the budget:
+// - per-line PayPal request and invoice ids stop any line being paid twice;
+// - every earlier line the ledger doesn't prove unpaid counts as spent;
+// - when a run's deals together cost more than its budget, lines are taken
+//   strictly in order, so a block depends only on earlier settled lines and an
+//   older copy can't unblock a line (spentBefore and mustGoInOrder in agent.ts);
+// - a decline, the one choice an older copy could forget, is kept at PayPal:
+//   the line's order is created (or patched) with custom_id "declined" and
+//   never approved, and pay, complete and resume refuse such an order
+//   (declineAtPayPal in agent.ts). This lasts as long as PayPal keeps the
+//   line's request id; the invoice id, which PayPal never reuses, backs it up.
+//
+// In demo mode (no PayPal keys) there is nothing at PayPal to hold a decline,
+// so a resent older copy could replay a declined line there; no money moves in demo mode.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sameRules, type PlayerRules } from "../rules.ts";
 

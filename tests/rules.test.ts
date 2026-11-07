@@ -2,7 +2,7 @@
 // on the server, and in the signed ledger, and change nothing when left unset.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampRules, readRules, rulesFromQuery, rulesPreview, rulesProblem, sameRules } from "../lib/rules.ts";
+import { clampDraft, clampRules, fmt, paidCount, parseDollars, PREVIEW_DEALS, readRules, rulesFromQuery, rulesPreview, rulesProblem, sameRules, WHOLE_DOLLARS_NOTE } from "../lib/rules.ts";
 import { buildMissionRun, buildSingleRun, buildSteps, deriveView, type Decision, type Run } from "../lib/timeline.ts";
 import { declineLine, deliver, earlierSettled, guardLine, pay, rebuildRun } from "../lib/server/agent.ts";
 import { emptyLedger, readLedger, signLedger, transition, type Ledger, type RunRef } from "../lib/server/ledger.ts";
@@ -255,9 +255,36 @@ test("when the deals cost more than your budget, the server takes items in order
   assert.fail("no deal with three items");
 });
 
-test("the rules preview is plain and honest", () => {
-  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 300, askAboveUsd: 100 }), /^With \$300, your agent can likely afford 3 of 3 items · anything over \$100 asks you first$/);
-  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 100, askAboveUsd: 40 }), /afford [12] of 3 items · anything over \$40 asks you first/);
-  assert.match(rulesPreview("single", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }, 70), /can likely afford it/);
-  assert.match(rulesPreview("rogue", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }, 70), /held to \$70/);
+test("the rules preview comes from the engine: the usual result over deals 1–25", () => {
+  const usual = (rules: { budgetUsd: number; askAboveUsd: number }) => {
+    const n = Array.from({ length: PREVIEW_DEALS }, (_, k) => paidCount(buildMissionRun(MISSION, k + 1, rules))).sort((a, b) => a - b);
+    return n[Math.floor(n.length / 2)];
+  };
+  for (const rules of [{ budgetUsd: 300, askAboveUsd: 100 }, { budgetUsd: 120, askAboveUsd: 40 }, { budgetUsd: 100, askAboveUsd: 25 }]) {
+    const text = rulesPreview("mission", MISSION, rules);
+    assert.equal(text, `With $${rules.budgetUsd}, your agent usually affords ${usual(rules)} of 3 items · anything over $${rules.askAboveUsd} asks you first`);
+  }
+  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 120, askAboveUsd: 40 }), /usually affords 2 of 3 items/, "matches what deal 42 actually does");
+  assert.match(rulesPreview("mission", "launch-week", { budgetUsd: 1000, askAboveUsd: 300 }), /^With \$1,000, .* anything over \$300 asks you first$/, "thousands commas");
+  assert.match(rulesPreview("single", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /usually gets it/);
+  assert.match(rulesPreview("rogue", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /held to \$70/);
+});
+
+test("typed amounts: decimals round to whole dollars, letters keep the rules in force", () => {
+  const fallback = { budgetUsd: 300, askAboveUsd: 100 };
+  assert.deepEqual(clampDraft("150.5", "60", fallback), { rules: { budgetUsd: 151, askAboveUsd: 60 }, note: "Rounded to whole dollars" });
+  assert.deepEqual(clampDraft("150.4", "60", fallback), { rules: { budgetUsd: 150, askAboveUsd: 60 }, note: "Rounded to whole dollars" });
+  assert.deepEqual(clampDraft("$1,000", "60", fallback), { rules: { budgetUsd: 1000, askAboveUsd: 60 }, note: null });
+  assert.deepEqual(clampDraft("15o", "60", fallback), { rules: { budgetUsd: 300, askAboveUsd: 60 }, note: WHOLE_DOLLARS_NOTE });
+  assert.deepEqual(clampDraft("150", "abc", fallback), { rules: { budgetUsd: 150, askAboveUsd: 100 }, note: WHOLE_DOLLARS_NOTE });
+  assert.deepEqual(clampDraft("", "", fallback), { rules: fallback, note: null });
+  assert.equal(parseDollars("1.2.3"), null);
+  assert.equal(parseDollars("-5"), null);
+});
+
+test("money reads with thousands commas", () => {
+  assert.equal(fmt(1000), "$1,000");
+  assert.equal(fmt(19.9), "$19.90");
+  assert.match(rulesProblem({ budgetUsd: 5000, askAboveUsd: 60 })!, /\$1,000/);
+  assert.match(buildMissionRun(MISSION, 42, { budgetUsd: 1000, askAboveUsd: 300 }).goal, /Budget \$1,000\./);
 });
