@@ -51,8 +51,6 @@ export interface Order {
   status: string;
   links?: OrderLink[];
   purchase_units?: {
-    reference_id?: string;
-    custom_id?: string;
     payments?: {
       captures?: { id: string; status: string }[];
       authorizations?: { id: string; status: string }[];
@@ -77,14 +75,7 @@ export interface OrderRequest {
   vaultId?: string;
   returnUrl?: string;
   cancelUrl?: string;
-  /** Marks the order on PayPal's side; DECLINED_MARK records that you declined this line. */
-  customId?: string;
 }
-
-/** custom_id of an order that only records that you declined its line. It is never approved or paid. */
-export const DECLINED_MARK = "declined";
-/** True when PayPal holds this line's order as declined by you. */
-export const isDeclinedOrder = (o: Order) => (o.purchase_units ?? []).some((u) => u.custom_id === DECLINED_MARK);
 
 export class PayPalClient {
   private cfg: PayPalConfig;
@@ -125,7 +116,7 @@ export class PayPalClient {
   }
 
   /** One REST call. Retries once on a network error or timeout, a 429 or 5xx (same request id, after a pause) or an expired token. */
-  async call<T>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown, requestId?: string): Promise<Call<T>> {
+  async call<T>(method: "GET" | "POST", path: string, body?: unknown, requestId?: string): Promise<Call<T>> {
     const label = `${method} ${path}`;
     for (let attempt = 0; ; attempt++) {
       const token = await this.accessToken();
@@ -189,7 +180,6 @@ export class PayPalClient {
           {
             reference_id: req.lineKey,
             invoice_id: `IB-${req.lineKey}`,
-            ...(req.customId ? { custom_id: req.customId } : {}),
             description: req.description.slice(0, 127),
             amount: { currency_code: "USD", value: total, breakdown },
             items: [{ name: req.itemName.slice(0, 127), quantity: "1", unit_amount: { currency_code: "USD", value: item }, category: req.category }],
@@ -223,20 +213,6 @@ export class PayPalClient {
 
   voidAuthorization(authorizationId: string, requestId: string) {
     return this.call<{ id?: string; status?: string }>("POST", `/v2/payments/authorizations/${authorizationId}/void`, undefined, requestId);
-  }
-
-  /**
-   * Marks an order as declined by you (custom_id), so a resent older ledger can't
-   * get it paid later. Uses "replace", and "add" if PayPal says there is nothing to replace.
-   */
-  async markDeclined(orderId: string, referenceId: string) {
-    const path = `/purchase_units/@reference_id=='${referenceId}'/custom_id`;
-    try {
-      return await this.call<unknown>("PATCH", `/v2/checkout/orders/${orderId}`, [{ op: "replace", path, value: DECLINED_MARK }]);
-    } catch (e) {
-      if (!(e instanceof PayPalError && e.status === 422)) throw e;
-      return this.call<unknown>("PATCH", `/v2/checkout/orders/${orderId}`, [{ op: "add", path, value: DECLINED_MARK }]);
-    }
   }
 
   getOrder(orderId: string) {

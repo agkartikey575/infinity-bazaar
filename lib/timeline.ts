@@ -36,7 +36,7 @@ export function defaultRules(kind: Run["kind"], id: string): PlayerRules {
 /**
  * AgentGuard's rules for one line with your budget and approval limit in place.
  * The safety reserve keeps the same share of the budget, and an item's limit
- * never goes above the budget. Deals are not touched: only what gets approved changes.
+ * never goes above the budget.
  */
 export function withRules(base: GuardRules, defaults: PlayerRules, rules?: PlayerRules): GuardRules {
   if (!rules) return base;
@@ -53,8 +53,9 @@ export function buildMissionRun(missionId: string, seed: number, rules?: PlayerR
   const mission = getMission(missionId);
   const defaults = defaultRules("mission", missionId);
   const chosen = rules ?? defaults;
-  // Deals are negotiated exactly as with the mission's own rules: same table, same deals.
-  const result = runMission(missionId, { seed });
+  // With your own budget the agent never plans past it: the deals together stay within it.
+  // Without one, the run is exactly the mission's own.
+  const result = runMission(missionId, rules ? { seed, budgetUsd: rules.budgetUsd } : { seed });
   return {
     kind: "mission",
     title: mission.title,
@@ -70,7 +71,8 @@ export function buildSingleRun(itemId: string, seed: number, rogue = false, rule
   const item = getItem(itemId);
   const mission = getMission("hackathon-10-days");
   const suggested = mission.suggested.find((s) => s.item === itemId)?.itemCapUsd;
-  const cap = rogue ? 70 : capFor(mission, suggested ?? item.price.high, 0);
+  // With your own budget the agent never plans past it either; rogue keeps its fixed $70.
+  const cap = rogue ? 70 : Math.min(capFor(mission, suggested ?? item.price.high, 0), rules?.budgetUsd ?? Infinity);
   const deal = runDeal(itemId, { seed, itemCapUsd: cap, rogue });
   const chosen = rules ?? SINGLE_RULES;
   return {
@@ -456,7 +458,8 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
       case "line-end":
         revealFloors = true;
         if (statuses[step.line] === "negotiating") statuses[step.line] = "no-deal";
-        if (o.status !== "deal") checkout = [{ text: "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info", source: "guard" }];
+        if (o.status !== "deal")
+          checkout = [{ text: o.budgetSkip ? `Skipped to stay within your ${money(run.budgetUsd)} budget. Nothing was spent.` : "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info", source: "guard" }];
         break;
     }
   }

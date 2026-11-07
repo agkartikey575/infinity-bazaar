@@ -12,7 +12,7 @@ Built for the PayPal AI Hackathon 2026.
 
 1. Press **Play**. Your agent haggles with three sellers side by side, in one-on-one chats you can read, while a live commentator calls the tactics.
 2. Type **1** or **7** in **Deal #** and press Enter. A purchase goes over your $100 approval line, so the agent stops and asks you first.
-3. Set **Your rules**: try **Budget ($) 120** and **Ask me above ($) 40** on deal 42. Same deal, same prices, but now AgentGuard asks you about the microphone and blocks the video editor. The server and PayPal hold you to the same rules, and the address (`?deal=42&budget=120&ask=40`) shares the exact setup.
+3. Set **Your rules**: try **Budget ($) 120** and **Ask me above ($) 40** on deal 42. Now AgentGuard asks you about the microphone, and the agent skips the video editor because it would go past your budget. The server and PayPal hold you to the same rules, and the address (`?deal=42&budget=120&ask=40`) shares the exact setup.
 4. Press **Agent goes rogue**. A pushy seller talks the agent into a $140 bundle on a $70 limit. The agent says yes; AgentGuard says no. **Nothing is sent to PayPal.**
 5. Switch on **PayPal sandbox (test money)** and play **Web font license** or **USB microphone**. A real PayPal window opens. Approve with a sandbox buyer account, then tick **Show PayPal details** to see the real order id.
 
@@ -95,7 +95,7 @@ The browser never sends a price. It only names the run (mission, deal number, yo
 - Vault v3 setup and payment tokens for the connected wallet, charged with merchant-initiated stored credentials.
 
 **Safety details:**
-- **Items in order when money is tight.** When a run's deals together cost more than your budget, the server pays items strictly in order, so a later item can't take money an earlier one is owed.
+- **Never past your budget.** With your own rules the agent never plans past your budget: if paying every deal in a run would go over, it skips items instead. So even a replayed or older ledger can't take spending past it.
 - **No double charges.** Each line has a stable `PayPal-Request-Id` and `invoice_id`, so a retry or double click returns the same order instead of paying twice.
 - **Recovery after a lost reply.** If PayPal already finished a step (already captured, already voided, duplicate invoice), the server reads PayPal's state and records it.
 - **Declined payments.** Declined funding sends the buyer back to PayPal. A declined saved wallet falls back to approval in a PayPal window.

@@ -5,7 +5,7 @@ import { checkPayment, getItem, type GuardDecision } from "../../src/engine/inde
 import { toCents, toValue, type Cents } from "../money.ts";
 import { buildMissionRun, buildSingleRun, type Run } from "../timeline.ts";
 import { transition, type Ledger, type LedgerEntry, type RunRef } from "./ledger.ts";
-import { approveLink, DECLINED_MARK, isDeclinedOrder, paymentIds, paymentSucceeded, PayPalClient, PayPalError, type Call, type Order, type OrderRequest } from "./paypal.ts";
+import { approveLink, paymentIds, paymentSucceeded, PayPalClient, PayPalError, type Order } from "./paypal.ts";
 
 export interface LogRow {
   /** What happened, in plain words, as shown in the payment panel. */
@@ -17,6 +17,7 @@ export interface LogRow {
   debugId?: string | null;
 }
 
+/** Dollars with thousands commas: "$1,000", "$19.99". */
 const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 export type PayResult =
@@ -62,45 +63,23 @@ const NO_SPEND = new Set(["declined", "blocked", "voided"]);
  * The browser holds the signed ledger, so it could send an older copy or none
  * at all. The server therefore never trusts a missing entry: every earlier line
  * with a deal counts as spent unless the ledger proves it ended without money
- * moving. Later lines count only for money the ledger shows committed: in a run
- * that could exceed the budget, pay() takes lines strictly in order (see
- * mustGoInOrder), so a later line can't be paid first and leave too little here.
+ * moving. If the whole run could ever exceed the budget, later lines count too,
+ * so lines paid out of order can't slip past the budget either. (With your own
+ * rules the engine never plans past the budget, so that case doesn't arise.)
  */
 export function spentBefore(run: Run, line: number, ledger: Ledger): number {
-  const deals = dealCents(run);
+  const budget = toCents(run.lines[line].rules.budgetUsd);
+  const dealCents: number[] = run.lines.map((l) => (l.deal.outcome.status === "deal" && l.deal.outcome.amountToPay !== undefined ? toCents(l.deal.outcome.amountToPay) : 0));
+  const worstCase = dealCents.reduce((a, b) => a + b, 0) > budget;
   let cents = 0;
   run.lines.forEach((_, j) => {
     if (j === line) return;
     const e = ledger.entries[j];
     if (e && COMMITTED.has(e.state)) cents += e.amountCents;
     else if (e && NO_SPEND.has(e.state)) return;
-    else if (j < line) cents += deals[j];
+    else if (j < line || worstCase) cents += dealCents[j];
   });
   return cents;
-}
-
-const dealCents = (run: Run): number[] =>
-  run.lines.map((l) => (l.deal.outcome.status === "deal" && l.deal.outcome.amountToPay !== undefined ? toCents(l.deal.outcome.amountToPay) : 0));
-
-/**
- * True when every deal in the run together costs more than the budget. Then the
- * order matters: which items get money depends on what came before, so each line
- * may be paid only once every earlier deal has settled in this ledger.
- */
-export function mustGoInOrder(run: Run, line: number): boolean {
-  return dealCents(run).reduce((a, b) => a + b, 0) > toCents(run.lines[line].rules.budgetUsd);
-}
-
-const SETTLED = new Set(["authorized", "captured", "voided", "declined", "blocked"]);
-
-/** Every earlier line with a deal has a settled entry in the ledger. */
-export function earlierSettled(run: Run, line: number, ledger: Ledger): boolean {
-  return dealCents(run).every((cents, j) => j >= line || cents === 0 || SETTLED.has(ledger.entries[j]?.state ?? ""));
-}
-
-/** Refuses a first step on a line that has to wait for the lines before it. */
-function inOrder(run: Run, line: number, ledger: Ledger) {
-  if (mustGoInOrder(run, line) && !earlierSettled(run, line, ledger)) throw new Error(`line ${line} has to wait until the items before it are settled`);
 }
 
 /** AgentGuard, run on the server against the ledger. */
@@ -158,33 +137,6 @@ function settleOrder(ledger: Ledger, line: number, amount: number, order: Order,
   };
 }
 
-/** The PayPal order for a line, built from the engine's numbers only. */
-function orderRequest(ref: RunRef, line: number, run: Run, returnUrl: string, vaultId?: string): OrderRequest {
-  const { l, o, item } = lineFor(run, line);
-  return {
-    intent: intentOf(l.itemId),
-    lineKey: lineKey(ref, line),
-    description: `${item.name} from ${o.sellerName}`,
-    itemName: item.name,
-    itemCents: toCents(o.price!),
-    feeCents: toCents(o.fee),
-    feeKind: item.delivery === "shipped" ? "shipping" : "handling",
-    category: item.delivery === "instant" ? "DIGITAL_GOODS" : "PHYSICAL_GOODS",
-    shipped: item.delivery === "shipped",
-    vaultId,
-    returnUrl: `${returnUrl}?line=${line}`,
-    cancelUrl: `${returnUrl}?line=${line}&cancel=1`,
-  };
-}
-
-const DECLINED_EARLIER = "You declined this payment earlier, so it won't be paid. No money moved.";
-
-/** PayPal holds this line's order as declined: record that, and never capture, authorize or create another. */
-function declinedAtPayPal(ledger: Ledger, line: number, amountCents: number, orderId: string, guard: GuardDecision, log: LogRow[] = []): PayResult {
-  const next = ledger.entries[line]?.state === "declined" ? ledger : transition(ledger, line, { state: "declined", amountCents, orderId });
-  return { decision: "declined", guard, ledger: next, log: [...log, { text: DECLINED_EARLIER, tone: "bad", detail: `order ${orderId} · custom_id ${DECLINED_MARK}` }] };
-}
-
 /**
  * Pay one line. `userApproved` is true once the person approved an "ask you"
  * payment in the deal room. Blocked payments never reach PayPal. Calling again
@@ -207,7 +159,6 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
       const s = settleOrder(ledger, line, own.amountCents, cur.data, intentOf(l.itemId), cur.label, cur.debugId);
       return s.state === "declined" ? { decision: "declined", guard, ledger: s.ledger, log: s.log } : { decision: "paid", state: s.state, review: s.review, guard, ledger: s.ledger, log: s.log };
     }
-    if (isDeclinedOrder(cur.data)) return declinedAtPayPal(ledger, line, own.amountCents, own.orderId, guard);
     if (cur.data.status === "APPROVED") {
       const done = await complete(ref, line, ledger, ctx.paypal);
       if ("needsApproval" in done) return { decision: "needs_paypal_approval", guard, ledger: done.ledger, log: done.log, orderId: own.orderId, approveUrl: done.approveUrl };
@@ -217,7 +168,6 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     if (url) return { decision: "needs_paypal_approval", guard, ledger, log: [], orderId: own.orderId, approveUrl: url };
   }
 
-  if (!own) inOrder(run, line, ledger);
   const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}`, tone: guard.decision === "approve" ? "ok" : guard.decision === "ask_user" ? "ask" : "bad" }];
   if (guard.decision === "block") {
     return { decision: "block", guard, ledger: transition(ledger, line, { state: "blocked", amountCents: amount }), log };
@@ -232,11 +182,22 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
   const key = lineKey(ref, line);
   const intent = intentOf(l.itemId);
   const useVault = guard.decision === "approve" && ctx.vaultId !== null;
-  const order = orderRequest(ref, line, run, ctx.returnUrl, useVault ? ctx.vaultId! : undefined);
+  const order = {
+    intent,
+    lineKey: key,
+    description: `${item.name} from ${o.sellerName}`,
+    itemName: item.name,
+    itemCents,
+    feeCents,
+    feeKind: item.delivery === "shipped" ? "shipping" : "handling",
+    category: item.delivery === "instant" ? "DIGITAL_GOODS" : "PHYSICAL_GOODS",
+    shipped: item.delivery === "shipped",
+    vaultId: useVault ? ctx.vaultId! : undefined,
+    returnUrl: `${ctx.returnUrl}?line=${line}`,
+    cancelUrl: `${ctx.returnUrl}?line=${line}&cancel=1`,
+  } as const;
 
-  // Simulated mode: no keys configured. No money moves here, and there is no PayPal
-  // order to hold a decline, so a resent older ledger can replay a declined line in
-  // demo mode only (see the note at the top of ledger.ts).
+  // Simulated mode: no keys configured.
   if (!ctx.paypal) {
     const id = `SIM${key.replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0, 14)}`;
     const state = intent === "CAPTURE" ? "captured" : "authorized";
@@ -256,13 +217,10 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     };
   }
 
-  // A line you declined has an order at PayPal marked as declined under this same
-  // request id, so PayPal hands that order back here: it is refused, never paid.
   let created;
   let viaWallet = useVault;
   try {
     created = await ctx.paypal.createOrder(order, `${key}:create`);
-    if (isDeclinedOrder(created.data)) return declinedAtPayPal(ledger, line, amount, created.data.id, guard, log);
   } catch (e) {
     // The saved wallet was declined: fall back to asking the buyer to approve this one in PayPal.
     if (!(useVault && e instanceof PayPalError && (e.issue === "INSTRUMENT_DECLINED" || e.issue === "PAYER_ACTION_REQUIRED"))) throw e;
@@ -270,7 +228,6 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     created = await ctx.paypal.createOrder({ ...order, vaultId: undefined }, `${key}:create:buyer`);
     viaWallet = false;
   }
-  if (isDeclinedOrder(created.data)) return declinedAtPayPal(ledger, line, amount, created.data.id, guard, log);
   const orderId = created.data.id;
   log.push({
     text: viaWallet ? `Paying ${usd(amount)} from your connected PayPal wallet.` : `PayPal order created for ${usd(amount)}.`,
@@ -309,11 +266,6 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
   if (!paypal) throw new Error("PayPal is not configured");
   const run = rebuildRun(ref);
   const intent = intentOf(lineFor(run, line).l.itemId);
-  // Never capture or authorize an order you declined, whatever ledger was sent.
-  const now = await paypal.getOrder(entry.orderId);
-  if (isDeclinedOrder(now.data)) {
-    return { state: "declined", ledger: transition(ledger, line, { state: "declined", amountCents: entry.amountCents }), log: [{ text: DECLINED_EARLIER, tone: "bad", debugId: now.debugId }] };
-  }
   const attempt = entry.attempt ?? 0;
   const requestId = `${lineKey(ref, line)}:${intent === "CAPTURE" ? "capture" : "authorize"}:${attempt}`;
   try {
@@ -349,10 +301,8 @@ export async function complete(ref: RunRef, line: number, ledger: Ledger, paypal
  * declined line could be used to hide spending from AgentGuard.
  */
 export function declineLine(ref: RunRef, line: number, ledger: Ledger): Ledger {
-  const run = rebuildRun(ref);
-  const { guard, amount } = guardLine(run, line, ledger);
+  const { guard, amount } = guardLine(rebuildRun(ref), line, ledger);
   const own = ledger.entries[line];
-  if (!own) inOrder(run, line, ledger);
   const waitingOnYou = own ? own.state === "pending_approval" : guard.decision === "ask_user";
   if (!waitingOnYou) throw new Error(`line ${line} isn't waiting for your decision`);
   return decline(line, ledger, amount);
@@ -361,55 +311,6 @@ export function declineLine(ref: RunRef, line: number, ledger: Ledger): Ledger {
 /** The buyer declined, in the deal room or with Cancel in PayPal. Nothing to undo at PayPal. */
 export function decline(line: number, ledger: Ledger, amountCents: number): Ledger {
   return transition(ledger, line, { state: "declined", amountCents });
-}
-
-export interface DeclineResult {
-  ledger: Ledger;
-  log: LogRow[];
-  /** "declined", unless PayPal shows the payment already went through on another copy of the ledger. */
-  state: "declined" | "captured" | "authorized";
-}
-
-const YOU_DECLINED: LogRow = { text: "You declined. No money moved.", tone: "bad" };
-
-/**
- * Decline a line and make the decline last at PayPal, so a resent older ledger
- * can't get the line paid later. No money moves either way:
- * - no order yet: create the line's order under its usual request id
- *   (`${lineKey}:create`) marked custom_id "declined", and never approve it.
- *   Any later attempt to pay the line gets this same order back and is refused;
- * - an order waiting in PayPal (Cancel in the PayPal window): mark it declined.
- * In demo mode there is nothing at PayPal to mark, and no money ever moves.
- */
-export async function declineAtPayPal(ref: RunRef, line: number, ledger: Ledger, paypal: PayPalClient | null, returnUrl = ""): Promise<DeclineResult> {
-  const next = declineLine(ref, line, ledger);
-  if (!paypal) return { ledger: next, log: [YOU_DECLINED], state: "declined" };
-  const run = rebuildRun(ref);
-  const key = lineKey(ref, line);
-  const amount = next.entries[line].amountCents;
-  const intent = intentOf(lineFor(run, line).l.itemId);
-  const own = ledger.entries[line];
-
-  let orderId = own?.orderId;
-  let found: Call<Order>;
-  if (orderId) found = await paypal.getOrder(orderId);
-  else {
-    found = await paypal.createOrder({ ...orderRequest(ref, line, run, returnUrl), customId: DECLINED_MARK }, `${key}:create`);
-    orderId = found.data.id;
-  }
-  const order = found.data;
-  // Already paid, on another copy of the ledger: record what PayPal says, never pretend otherwise.
-  if (order.status === "COMPLETED") {
-    const s = settleOrder(ledger, line, own?.amountCents ?? amount, order, intent, found.label, found.debugId);
-    if (s.state !== "declined") return { ledger: s.ledger, state: s.state, log: [{ text: "This payment had already gone through in PayPal, so it can't be declined now.", tone: "bad" }, ...s.log] };
-    return { ledger: s.ledger, state: "declined", log: [YOU_DECLINED] };
-  }
-  const marked = isDeclinedOrder(order) ? found : await paypal.markDeclined(orderId, key);
-  return {
-    ledger: transition(ledger, line, { state: "declined", amountCents: amount, orderId }),
-    state: "declined",
-    log: [{ ...YOU_DECLINED, detail: `${marked.label} · order ${orderId} marked custom_id ${DECLINED_MARK}, never approved` }],
-  };
 }
 
 /** Delivery: the server decides from the deal whether it arrived. Capture the hold, or void it. */

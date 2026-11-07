@@ -324,9 +324,6 @@ export default function DealRoom() {
     return null;
   };
   const gate = gateAt(cursor);
-  /** Earlier lines AgentGuard blocked on screen that the server hasn't recorded yet. */
-  const unreported = (line: number) =>
-    steps.filter((s) => s.type === "guard" && s.line < line && s.guard.decision === "block" && ["idle", "working", "error"].includes(live.lines[s.line]?.state ?? "idle")).map((s) => s.line);
 
   useEffect(() => {
     if (!playing || !gate || gate.ready) return;
@@ -336,14 +333,6 @@ export default function DealRoom() {
       return;
     }
     if (state !== "idle") return; // working, waiting for you, or failed
-    // The server takes lines in order: first let it record any earlier line AgentGuard blocked.
-    const before = unreported(gate.line);
-    if (before.length) {
-      // One at a time, oldest first, so each report carries the ledger the one before returned.
-      // A report that failed waits for Retry (shown in the Payment panel).
-      if ((live.lines[before[0]]?.state ?? "idle") === "idle") live.pay(before[0], false);
-      return;
-    }
     if (gate.action === "pay") {
       const win = pendingWin.current;
       pendingWin.current = null;
@@ -362,7 +351,7 @@ export default function DealRoom() {
     if (!shown) return;
     const idle = (l: number) => (live.lines[l]?.state ?? "idle") === "idle";
     // Approved: pay now. Blocked: let the server's AgentGuard refuse too, so its verdict is on screen.
-    if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line) && !unreported(shown.line).length) live.pay(shown.line, false);
+    if (shown.type === "guard" && shown.guard.decision !== "ask_user" && idle(shown.line)) live.pay(shown.line, false);
     if (shown.type === "event" && live.lines[shown.line]?.state === "authorized" && !live.lines[shown.line]?.review) live.deliver(shown.line);
   }, [cursor, playing, live.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -518,8 +507,6 @@ export default function DealRoom() {
     setBudgetDraft(String(defaults.budgetUsd));
     setAskDraft(String(defaults.askAboveUsd));
   };
-  /** An earlier blocked line whose report to the server failed; Retry sends it again. */
-  const stuckReport = live.enabled ? unreported(run.lines.length).find((i) => i !== view.line && live.lines[i]?.state === "error") : undefined;
   const previewRules = draftRules(applied).rules;
   const k = runKind(selection, rogue);
   const preview = useMemo(() => rulesPreview(k.kind, k.id, previewRules), [k.kind, k.id, previewRules.budgetUsd, previewRules.askAboveUsd]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -856,13 +843,6 @@ export default function DealRoom() {
                   : "Something went wrong with this payment. Nothing new was charged. Press Retry, or start a new deal."}{" "}
                 {showDetails && <span className="row-detail">{live.lines[view.line]?.error}</span>}{" "}
                 <button onClick={() => live.retry(view.line)}>Retry</button>
-              </div>
-            )}
-            {stuckReport !== undefined && (
-              <div className="row-bad">
-                We couldn&apos;t confirm with our server that {run.lines[stuckReport].itemName} was blocked, so the next payment waits.{" "}
-                {showDetails && <span className="row-detail">{live.lines[stuckReport]?.error}</span>}{" "}
-                <button onClick={() => live.retry(stuckReport)}>Retry</button>
               </div>
             )}
             <span className="note">

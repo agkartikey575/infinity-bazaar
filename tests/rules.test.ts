@@ -1,10 +1,14 @@
 // Your rules: the budget and approval limit you set hold on screen, in AgentGuard
 // on the server, and in the signed ledger, and change nothing when left unset.
+// With your rules the engine never plans past the budget, so even replayed
+// ledgers can't take spending past it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { clampDraft, clampRules, fmt, paidCount, parseDollars, PREVIEW_DEALS, readRules, rulesFromQuery, rulesPreview, rulesProblem, sameRules, WHOLE_DOLLARS_NOTE } from "../lib/rules.ts";
 import { buildMissionRun, buildSingleRun, buildSteps, deriveView, type Decision, type Run } from "../lib/timeline.ts";
-import { declineLine, deliver, earlierSettled, guardLine, pay, rebuildRun } from "../lib/server/agent.ts";
+import { complete, declineLine, deliver, guardLine, pay, rebuildRun } from "../lib/server/agent.ts";
+import { PayPalClient } from "../lib/server/paypal.ts";
+import { toCents } from "../lib/money.ts";
 import { emptyLedger, readLedger, signLedger, transition, type Ledger, type RunRef } from "../lib/server/ledger.ts";
 import { HttpError, readRunRef } from "../lib/server/request.ts";
 import { getMission, missionRules } from "../src/engine/index.ts";
@@ -117,11 +121,9 @@ test("the server rejects bad rules with 400 and a clear message, and binds good 
   assert.equal("rules" in readRunRef({ ...base, rules: null }), false);
 });
 
-test("rebuildRun with rules: your budget and limit, a scaled reserve, capped item limits, the same deals", () => {
+test("rebuildRun with rules: your budget and limit, a scaled reserve, capped item limits", () => {
   const mission = getMission(MISSION);
-  const plain = rebuildRun(ref(42));
   const run = rebuildRun(ref(42, { budgetUsd: 150, askAboveUsd: 60 }));
-  assert.deepEqual(deals(run), deals(plain), "same deal number, same deals");
   assert.equal(run.budgetUsd, 150);
   assert.equal(run.askAboveUsd, 60);
   assert.match(run.goal, /Budget \$150\./);
@@ -137,41 +139,59 @@ test("rebuildRun with rules: your budget and limit, a scaled reserve, capped ite
   const copy = launch.lines.find((l) => l.itemId === "copywriter")!;
   assert.equal(copy.itemCapUsd, 200);
   assert.equal(copy.rules.itemCapUsd, 120);
-  // Single items have no reserve, and keep none.
+  // Single items have no reserve, keep none, and play the same deal.
   const single = buildSingleRun("webcam", 3, false, { budgetUsd: 200, askAboveUsd: 30 });
   assert.equal(single.lines[0].rules.reserveUsd, undefined);
   assert.equal(single.lines[0].rules.askAboveUsd, 30);
   assert.deepEqual(deals(single), deals(buildSingleRun("webcam", 3)));
 });
 
-test("rogue mode keeps its $70 limit and is still blocked under any rules", () => {
-  for (const rules of [undefined, { budgetUsd: 100, askAboveUsd: 25 }, { budgetUsd: 1000, askAboveUsd: 300 }]) {
-    const run = rebuildRun({ kind: "rogue", id: "usb-mic", seed: 42, nonce: "rulesnonce1", ...(rules ? { rules } : {}) });
-    assert.equal(run.lines[0].rules.itemCapUsd, 70);
-    assert.deepEqual(screen(run), ["blocked"]);
-    assert.equal(guardLine(run, 0, emptyLedger(ref(42))).guard.decision, "block");
+/** A small deterministic random source for the sweep. */
+function lcg(seed: number) {
+  let s = seed >>> 0;
+  return (lo: number, hi: number) => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return lo + (s % (hi - lo + 1));
+  };
+}
+const dealTotal = (run: Run) => run.lines.reduce((sum, l) => sum + (l.deal.outcome.status === "deal" ? toCents(l.deal.outcome.amountToPay!) : 0), 0);
+
+test("with your rules the engine never plans past the budget: 2,000 random setups", () => {
+  const rnd = lcg(20261107);
+  const ids = ["hackathon-10-days", "launch-week", "home-studio"];
+  let skips = 0;
+  for (let i = 0; i < 2000; i++) {
+    const budgetUsd = rnd(100, 1000);
+    const rules = { budgetUsd, askAboveUsd: Math.min(budgetUsd, rnd(25, 300)) };
+    const r: RunRef = { kind: "mission", id: ids[rnd(0, 2)], seed: rnd(1, 999_999_999), nonce: "sweepnonce1", rules };
+    const run = rebuildRun(r);
+    assert.ok(dealTotal(run) <= budgetUsd * 100, `${r.id} deal ${r.seed} at $${budgetUsd}: deals total $${dealTotal(run) / 100}`);
+    // AgentGuard never has to block for the budget: paying every deal still fits.
+    skips += run.lines.filter((l) => l.deal.outcome.budgetSkip).length;
+  }
+  assert.ok(skips > 0, "some items are skipped for the budget");
+  // Single items: the limit never goes above the budget.
+  for (const id of ["usb-mic", "copywriter", "portable-monitor"]) {
+    const run = buildSingleRun(id, 5, false, { budgetUsd: 100, askAboveUsd: 25 });
+    assert.ok(run.lines[0].rules.itemCapUsd! <= 100);
+    assert.ok(dealTotal(run) <= 10000);
   }
 });
 
-test("AgentGuard follows your budget: a low budget blocks the third item", () => {
-  let found = 0;
-  for (let seed = 1; seed <= 200 && found < 5; seed++) {
-    const plain = buildMissionRun(MISSION, seed);
-    // Three deals, the first two paid in full (a failed delivery would free its money).
-    if (!plain.lines.every((l) => l.deal.outcome.status === "deal")) continue;
-    if (screen(plain).slice(0, 2).some((s) => s !== "captured")) continue;
-    const [a, b, c] = plain.lines.map((l) => l.deal.outcome.amountToPay!);
-    // Enough for the first two, not the third; a high approval limit so nothing waits on you.
-    const budget = Math.ceil(a + b);
-    if (budget < 100 || budget >= a + b + c || budget > 1000) continue;
-    const rules = { budgetUsd: budget, askAboveUsd: Math.min(300, budget) };
-    const run = buildMissionRun(MISSION, seed, rules);
-    const s = screen(run);
-    assert.equal(s[2], "blocked", `deal ${seed}: third item blocked at $${budget}`);
-    assert.notEqual(screen(plain)[2], "blocked", `deal ${seed}: not blocked with the mission's own budget`);
-    found++;
-  }
-  assert.ok(found >= 3, `found enough deals: ${found}`);
+test("a low budget makes the agent skip an item, in plain words, before any money moves", () => {
+  const r = buildMissionRun(MISSION, 42, { budgetUsd: 120, askAboveUsd: 40 });
+  const skipped = r.lines.find((l) => l.deal.outcome.budgetSkip)!;
+  assert.ok(skipped, "deal 42 at $120 skips an item");
+  assert.equal(skipped.deal.outcome.status, "walk-away");
+  const words = skipped.deal.beats.map((b) => b.text).join(" ");
+  assert.match(words, /\$120 budget/);
+  assert.match(words, /Budget guard: the agent skips the .+ to stay within your \$120 budget\./);
+  const s = screen(r);
+  assert.equal(s[r.lines.indexOf(skipped)], "no-deal");
+  assert.ok(!s.includes("blocked"), "nothing needs blocking");
+  const steps = buildSteps(r, { 0: "approved" }).steps;
+  const view = deriveView(r, steps, steps.findIndex((x) => x.type === "line-end" && x.line === r.lines.indexOf(skipped)) + 1);
+  assert.match(view.checkout[0].text, /Skipped to stay within your \$120 budget/);
 });
 
 test("AgentGuard follows your approval limit: a low limit asks you first", () => {
@@ -212,9 +232,7 @@ test("no rules: runs, AgentGuard and the ledger are exactly as before", () => {
       assert.equal(run.budgetUsd, mission.budgetUsd);
       assert.equal(run.askAboveUsd, mission.askAboveUsd);
       for (const l of run.lines) assert.deepEqual(l.rules, missionRules(mission, l.itemCapUsd));
-      // The mission's own numbers, sent as rules, give the same verdicts.
-      const same = buildMissionRun(m, seed, { budgetUsd: mission.budgetUsd, askAboveUsd: mission.askAboveUsd });
-      assert.deepEqual(screen(same), screen(run));
+      assert.ok(run.lines.every((l) => !l.deal.outcome.budgetSkip));
     }
   }
   const single = buildSingleRun("usb-mic", 42);
@@ -240,19 +258,105 @@ test("the server agrees with the screen under your rules, deal after deal", asyn
   assert.equal(checked, 40);
 });
 
-test("when the deals cost more than your budget, the server takes items in order", async () => {
-  const ctx = { paypal: null, vaultId: null, returnUrl: "http://localhost/paypal/return" };
-  for (let seed = 1; seed < 200; seed++) {
-    const r = ref(seed, { budgetUsd: 100, askAboveUsd: 100 });
+/** A fake PayPal with state: a reused request id returns the original order, as PayPal does. */
+function fakePayPal() {
+  const byRequest = new Map<string, string>();
+  const orders = new Map<string, { id: string; status: string; cents: number; payments?: unknown }>();
+  let capturedCents = 0;
+  const view = (o: { id: string; status: string; payments?: unknown }) => ({
+    id: o.id,
+    status: o.status,
+    purchase_units: o.payments ? [{ payments: o.payments }] : [{}],
+    links: o.status === "COMPLETED" ? [] : [{ rel: "payer-action", href: `https://sandbox.example/approve/${o.id}` }],
+  });
+  const fetchFn = async (url: string | URL | Request, init?: RequestInit) => {
+    const u = new URL(String(url));
+    const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+    if (u.pathname === "/v1/oauth2/token") return json({ access_token: "tok", expires_in: 3600 });
+    const body = typeof init?.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : null;
+    if (u.pathname === "/v2/checkout/orders") {
+      const rid = new Headers(init?.headers).get("PayPal-Request-Id")!;
+      let id = byRequest.get(rid);
+      if (!id) {
+        id = `ORDER${orders.size + 1}`;
+        byRequest.set(rid, id);
+        orders.set(id, { id, status: "PAYER_ACTION_REQUIRED", cents: Math.round(Number(body.purchase_units[0].amount.value) * 100) });
+      }
+      return json(view(orders.get(id)!), 201);
+    }
+    const one = u.pathname.match(/^\/v2\/checkout\/orders\/(\w+)$/);
+    if (one) return json(view(orders.get(one[1])!));
+    const act = u.pathname.match(/^\/v2\/checkout\/orders\/(\w+)\/(capture|authorize)$/);
+    if (act) {
+      const o = orders.get(act[1])!;
+      if (o.status === "COMPLETED") return json({ name: "UNPROCESSABLE_ENTITY", message: "done", details: [{ issue: act[2] === "capture" ? "ORDER_ALREADY_CAPTURED" : "ORDER_ALREADY_AUTHORIZED" }] }, 422);
+      if (o.status !== "APPROVED") return json({ name: "UNPROCESSABLE_ENTITY", message: "not approved", details: [{ issue: "ORDER_NOT_APPROVED" }] }, 422);
+      o.status = "COMPLETED";
+      capturedCents += o.cents;
+      o.payments = act[2] === "capture" ? { captures: [{ id: `CAP-${o.id}`, status: "COMPLETED" }] } : { authorizations: [{ id: `AUTH-${o.id}`, status: "CREATED" }] };
+      return json(view(o), 201);
+    }
+    const auth = u.pathname.match(/^\/v2\/payments\/authorizations\/([\w-]+)\/(capture|void)$/);
+    if (auth) return auth[2] === "capture" ? json({ id: `CAP2-${auth[1]}`, status: "COMPLETED" }, 201) : new Response(null, { status: 204 });
+    return json({ name: "NOT_FOUND", message: u.pathname }, 404);
+  };
+  const client = new PayPalClient({ base: "https://paypal.test", clientId: "id", secret: "secret", fetch: fetchFn as typeof fetch, timeoutMs: 200, backoffMs: 1 });
+  return { client, approve: (id: string) => (orders.get(id)!.status = "APPROVED"), paid: () => capturedCents };
+}
+
+/** Pays a line with PayPal, approving in the PayPal window whenever asked. Returns the new ledger. */
+async function payLine(r: RunRef, line: number, ledger: Ledger, pp: ReturnType<typeof fakePayPal>): Promise<Ledger> {
+  const res = await pay(r, line, ledger, true, { paypal: pp.client, vaultId: null, returnUrl: "https://app/paypal/return" });
+  if (res.decision !== "needs_paypal_approval") return res.ledger;
+  pp.approve(res.orderId);
+  const done = await complete(r, line, res.ledger, pp.client);
+  return done.ledger;
+}
+
+test("declines plus resent older ledgers can't take spending past the budget", async () => {
+  // Budget $120, ask above $40: decline line 0, pay the rest, then replay line 0 with no ledger.
+  {
+    const pp = fakePayPal();
+    const r = ref(42, { budgetUsd: 120, askAboveUsd: 40 }, "replayone01");
     const run = rebuildRun(r);
-    if (!run.lines.every((l) => l.deal.outcome.status === "deal")) continue;
-    // Skipping ahead is refused, so a later item can't take money an earlier one is owed.
-    await assert.rejects(pay(r, 2, emptyLedger(r), true, ctx), /has to wait until the items before it are settled/);
-    assert.throws(() => declineLine(r, 1, emptyLedger(r)), /has to wait/);
-    assert.equal(earlierSettled(run, 0, emptyLedger(r)), true);
-    return;
+    let l = declineLine(r, 0, emptyLedger(r));
+    for (let i = 1; i < run.lines.length; i++) if (run.lines[i].deal.outcome.status === "deal") l = await payLine(r, i, l, pp);
+    await payLine(r, 0, emptyLedger(r), pp);
+    assert.ok(pp.paid() <= 12000, `paid $${pp.paid() / 100} of $120`);
   }
-  assert.fail("no deal with three items");
+  // Budget $150, ask above $50: pay 0, decline 1, pay 2, then replay line 1 with the older ledger.
+  {
+    const pp = fakePayPal();
+    const r = ref(42, { budgetUsd: 150, askAboveUsd: 50 }, "replaytwo01");
+    const run = rebuildRun(r);
+    const L1 = await payLine(r, 0, emptyLedger(r), pp);
+    let l = run.lines[1].deal.outcome.status === "deal" ? declineLine(r, 1, L1) : L1;
+    if (run.lines[2].deal.outcome.status === "deal") l = await payLine(r, 2, l, pp);
+    if (run.lines[1].deal.outcome.status === "deal") await payLine(r, 1, L1, pp);
+    assert.ok(pp.paid() <= 15000, `paid $${pp.paid() / 100} of $150`);
+  }
+});
+
+test("a decline racing a capture still stays within the budget", async () => {
+  for (const [budgetUsd, askAboveUsd] of [[120, 40], [150, 50], [100, 25]]) {
+    const pp = fakePayPal();
+    const r = ref(42, { budgetUsd, askAboveUsd }, `racenonce${budgetUsd}`);
+    const run = rebuildRun(r);
+    const ctx = { paypal: pp.client, vaultId: null, returnUrl: "https://app/paypal/return" };
+    // Line 0 waits in PayPal; the buyer approves while the deal room declines it.
+    const waiting = await pay(r, 0, emptyLedger(r), true, ctx);
+    assert.equal(waiting.decision, "needs_paypal_approval");
+    pp.approve((waiting as { orderId: string }).orderId);
+    const [captured, declined] = [await complete(r, 0, waiting.ledger, pp.client), declineLine(r, 0, waiting.ledger)];
+    assert.notEqual((captured as { state?: string }).state, undefined);
+    // Everything else is paid on the ledger that says line 0 was declined.
+    let l = declined;
+    for (let i = 1; i < run.lines.length; i++) if (run.lines[i].deal.outcome.status === "deal") l = await payLine(r, i, l, pp);
+    // And every line replayed once more with no ledger at all.
+    for (let i = 0; i < run.lines.length; i++) if (run.lines[i].deal.outcome.status === "deal") await payLine(r, i, emptyLedger(r), pp);
+    assert.ok(pp.paid() <= budgetUsd * 100, `paid $${pp.paid() / 100} of $${budgetUsd}`);
+    assert.ok(pp.paid() <= dealTotal(run), "each line paid at most once");
+  }
 });
 
 test("the rules preview comes from the engine: the usual result over deals 1–25", () => {
@@ -262,9 +366,13 @@ test("the rules preview comes from the engine: the usual result over deals 1–2
   };
   for (const rules of [{ budgetUsd: 300, askAboveUsd: 100 }, { budgetUsd: 120, askAboveUsd: 40 }, { budgetUsd: 100, askAboveUsd: 25 }]) {
     const text = rulesPreview("mission", MISSION, rules);
-    assert.equal(text, `With $${rules.budgetUsd}, your agent usually affords ${usual(rules)} of 3 items · anything over $${rules.askAboveUsd} asks you first`);
+    const n = usual(rules);
+    const buys = n === 3 ? "all 3 items" : `${n} of 3 items`;
+    assert.ok(text.startsWith(`With $${rules.budgetUsd}, your agent usually buys ${buys}`), text);
+    assert.ok(text.endsWith(` · anything over $${rules.askAboveUsd} asks you first`), text);
   }
-  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 120, askAboveUsd: 40 }), /usually affords 2 of 3 items/, "matches what deal 42 actually does");
+  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 120, askAboveUsd: 40 }), /usually buys 2 of 3 items and skips the rest to stay in budget · /, "matches what deal 42 actually does");
+  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 300, askAboveUsd: 100 }), /usually buys all 3 items · /);
   assert.match(rulesPreview("mission", "launch-week", { budgetUsd: 1000, askAboveUsd: 300 }), /^With \$1,000, .* anything over \$300 asks you first$/, "thousands commas");
   assert.match(rulesPreview("single", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /usually gets it/);
   assert.match(rulesPreview("rogue", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /held to \$70/);

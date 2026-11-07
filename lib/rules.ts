@@ -110,14 +110,19 @@ export function rulesPreview(kind: "mission" | "single" | "rogue", id: string, r
   const ask = `anything over ${fmt(rules.askAboveUsd)} asks you first`;
   if (kind === "rogue") return `The agent is held to $70 for this item, whatever it's told · ${ask}`;
   const counts: number[] = [];
+  const skips: number[] = [];
   let total = 0;
   for (let seed = 1; seed <= PREVIEW_DEALS; seed++) {
     const run = kind === "mission" ? buildMissionRun(id, seed, rules) : buildSingleRun(id, seed, false, rules);
     total = run.lines.length;
     counts.push(paidCount(run));
+    skips.push(run.lines.filter((l) => l.deal.outcome.budgetSkip).length);
   }
-  counts.sort((a, b) => a - b);
-  const usual = counts[Math.floor(counts.length / 2)];
+  const usual = median(counts);
   if (kind === "single") return `With ${fmt(rules.budgetUsd)}, your agent usually ${usual ? "gets it" : "can't get it"} · ${ask}`;
-  return `With ${fmt(rules.budgetUsd)}, your agent usually affords ${usual} of ${total} items · ${ask}`;
+  const buys = usual === total ? `usually buys all ${total} items` : `usually buys ${usual} of ${total} items`;
+  const skipNote = median(skips) > 0 ? " and skips the rest to stay in budget" : "";
+  return `With ${fmt(rules.budgetUsd)}, your agent ${buys}${skipNote} · ${ask}`;
 }
+
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];

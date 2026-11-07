@@ -202,10 +202,15 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     assert.match(await bnums(page), /Budget \$120\b/);
     assert.match(await page.locator(".pc.limit").innerText(), /of \$120 budget/);
     assert.match(await page.locator(".bask").getAttribute("title"), /\$40/);
-    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent usually affords 2 of 3 items · anything over \$40 asks you first/);
+    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent usually buys 2 of 3 items and skips the rest to stay in budget · anything over \$40 asks you first/);
     assert.equal(new URL(page.url()).search, "?deal=42&budget=120&ask=40", "the link carries the deal and your rules");
+    // The engine skips an item to stay within $120; the screen says so in plain words.
+    const skipped = exp.run.lines.findIndex((l) => l.deal.outcome.budgetSkip);
+    assert.ok(skipped >= 0, "deal 42 at $120 skips an item for the budget");
+    assert.equal(exp.pills[skipped], "Walked away");
     await playToEnd(page, "approved");
     assert.deepEqual(await pills(page), exp.pills, "statuses match the engine under your rules");
+    assert.ok(!exp.pills.includes("Blocked"), "nothing needs blocking: the agent stayed within budget");
     assert.match(await bnums(page), new RegExp(`Paid \\$${exp.paid}\\b`));
     assert.match(await page.locator(".receipt").innerText(), new RegExp(`Paid \\$${exp.paid} of \\$120`));
   });

@@ -1,6 +1,7 @@
 // Runs a whole mission: every item's deal, each payment checked by AgentGuard.
 // Assumes you approve every "ask you" payment; the deal room asks for real.
 import { getItem, getMission } from "./data.ts";
+import { planBuyer } from "./buyer.ts";
 import { runDeal, type DealOptions } from "./deal.ts";
 import { checkPayment, type GuardDecision, type GuardRules } from "./guard.ts";
 import type { DealResult, Mission, SellerMemory } from "./types.ts";
@@ -40,9 +41,52 @@ export function capFor(mission: Mission, itemCapUsd: number, committed: number):
   return Math.max(0, Math.min(itemCapUsd, mission.budgetUsd - committed));
 }
 
+/** "a USB microphone" → "the USB microphone". */
+const theItem = (phrase: string) => phrase.replace(/^(an?|some) /i, "the ");
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+/**
+ * One item under your own budget: the agent never plans past what's left,
+ * counting every earlier deal as paid. Too little left to even open, and it
+ * passes on the item; a walk-away the budget caused says so.
+ */
+function withinBudget(itemId: string, itemCapUsd: number, left: number, budgetUsd: number, opts: DealOptions): DealResult {
+  const item = getItem(itemId);
+  const cap = Math.max(0, Math.min(itemCapUsd, left));
+  const deal = runDeal(itemId, { ...opts, itemCapUsd: cap });
+  const skipLine = `Budget guard: the agent skips ${theItem(item.phrase)} to stay within your ${usd(budgetUsd)} budget.`;
+  // Not enough left for even the opening offer, or (a safety net the engine never needs) a deal past what's left.
+  const opening = planBuyer(item).anchor;
+  if (cap < opening || (deal.outcome.status === "deal" && (deal.outcome.amountToPay ?? 0) > left)) {
+    const sellers = deal.sellers.map((s) => ({ ...s, finalAsk: s.openAsk, active: true }));
+    return {
+      ...deal,
+      sellers,
+      beats: [
+        { kind: "agent", round: 1, to: sellers.map((s) => s.id), move: "walk-away", text: `That would put me over your ${usd(budgetUsd)} budget, so I'll pass on this one.` },
+        { kind: "commentary", round: 1, text: skipLine },
+      ],
+      outcome: { status: "walk-away", rounds: 1, fee: 0, futureFee: 0, levers: [], terms: [], afterPayment: null, budgetSkip: true },
+      memory: structuredClone(opts.memory ?? {}),
+    };
+  }
+  if (deal.outcome.status !== "deal" && cap < itemCapUsd) {
+    const last = deal.beats.at(-1)?.round ?? 1;
+    return { ...deal, beats: [...deal.beats, { kind: "commentary", round: last, text: skipLine }], outcome: { ...deal.outcome, budgetSkip: true } };
+  }
+  return deal;
+}
+
 export function runMission(
   missionId: string,
-  opts: { seed?: number; memory?: SellerMemory; includeNice?: boolean; dealOptions?: Omit<DealOptions, "seed" | "itemCapUsd" | "memory"> } = {},
+  opts: {
+    seed?: number;
+    memory?: SellerMemory;
+    includeNice?: boolean;
+    dealOptions?: Omit<DealOptions, "seed" | "itemCapUsd" | "memory">;
+    /** Your own budget. The agent never plans past it: the run's deals together stay within it. */
+    budgetUsd?: number;
+  } = {},
 ): MissionResult {
   const mission = getMission(missionId);
   const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
@@ -52,10 +96,18 @@ export function runMission(
   const lines: MissionLine[] = [];
 
   const items = mission.suggested.filter((s) => s.priority === "core" || opts.includeNice);
+  /** With your own budget: what's left if every earlier deal is paid. */
+  let left = opts.budgetUsd ?? Infinity;
   items.forEach((entry, i) => {
     const item = getItem(entry.item);
-    const cap = capFor(mission, entry.itemCapUsd, spent + pending);
-    const deal = runDeal(entry.item, { ...opts.dealOptions, seed: seed + i * 7919, itemCapUsd: cap, memory });
+    const dealSeed = seed + i * 7919;
+    let deal: DealResult;
+    if (opts.budgetUsd === undefined) {
+      deal = runDeal(entry.item, { ...opts.dealOptions, seed: dealSeed, itemCapUsd: capFor(mission, entry.itemCapUsd, spent + pending), memory });
+    } else {
+      deal = withinBudget(entry.item, entry.itemCapUsd, left, opts.budgetUsd, { ...opts.dealOptions, seed: dealSeed, memory });
+      if (deal.outcome.status === "deal") left -= deal.outcome.amountToPay ?? 0;
+    }
     memory = deal.memory;
     const o = deal.outcome;
 

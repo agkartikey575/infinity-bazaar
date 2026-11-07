@@ -183,6 +183,8 @@ export interface DealOutcome {
   rogue?: boolean;
   /** An event that happens after payment, such as a failed delivery. */
   afterPayment: { eventId: string; text: string } | null;
+  /** True when the agent passed on the item to stay within your budget. */
+  budgetSkip?: boolean;
 }
 
 export interface DealResult {

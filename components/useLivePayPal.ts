@@ -165,7 +165,7 @@ export function useLivePayPal(run: RunRef) {
       const r = await waitForReturn(w, "order", line);
       if (r.how === "cancelled") {
         const d = await post("/api/agent/decline", line);
-        return set(line, { state: d.state ?? "declined", rows: [{ text: "You cancelled in PayPal.", tone: "bad" }, ...d.log] });
+        return set(line, { state: "declined", rows: [{ text: "You cancelled in PayPal.", tone: "bad" }, ...d.log] });
       }
       // Returned or just closed: the server checks with PayPal whether it was approved.
       await finish(line);
@@ -222,7 +222,7 @@ export function useLivePayPal(run: RunRef) {
     (line: number) =>
       guarded(line, "pay", async () => {
         const d = await post("/api/agent/decline", line);
-        set(line, { state: d.state ?? "declined", rows: d.log });
+        set(line, { state: "declined", rows: d.log });
       }),
     [guarded, post],
   );
