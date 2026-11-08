@@ -578,6 +578,14 @@ export default function DealRoom() {
         <div className="brand">
           <h1>
             Infinity Bazaar<span className="inf">∞</span>
+            <span className="about">
+              <button type="button" className="info" aria-label="What is Infinity Bazaar?" aria-describedby="about-tip">
+                i
+              </button>
+              <span role="tooltip" id="about-tip" className="tip">
+                An AI agent haggles with AI sellers for everything on your list, then pays through PayPal, but only when your rules say yes.
+              </span>
+            </span>
           </h1>
           <span className="eyebrow">Your AI haggles. Your rules guard the money.</span>
         </div>
