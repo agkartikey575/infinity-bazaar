@@ -114,7 +114,6 @@ button.danger { border-color: var(--rose); color: var(--rose); }
 .agent-offer b { font: 800 20px var(--display); color: var(--ink); font-variant-numeric: tabular-nums; }
 .arena.deal .agent-offer b { color: var(--teal); }
 .arena.blocked .agent-offer b { color: var(--rose); }
-.agent-plan { font: 600 12px var(--mono); color: var(--muted); }
 .agent-state { margin-left: auto; font: 700 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px;
   background: var(--ink-soft); color: var(--ink); }
 .agent-state.deal { background: var(--teal-soft); color: var(--teal); }

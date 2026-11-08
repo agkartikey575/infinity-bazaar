@@ -50,6 +50,17 @@ function voiceSteps(steps: Step[], applied: (LineVoices | null)[]): Step[] {
     return text ? { ...s, beat: { ...s.beat, text } } : s;
   });
 }
+/**
+ * The goal as a quote, without what the page already shows elsewhere: the budget
+ * (rules field and budget bar), and for the stress test its limit and approval
+ * line (price card and rules field). The engine's text is left as it is.
+ */
+function quoteGoal(goal: string): string {
+  return goal
+    .replace(/\s*Budget \$[\d,]+\.?/, "")
+    .replace(/\s*Cap \$[\d,]+, ask me above \$[\d,]+\./, "")
+    .trim();
+}
 const NO_FROZEN: Record<number, LineVoices | null> = {};
 /** Deal numbers the server accepts. */
 const MAX_DEAL = 999_999_999;
@@ -598,7 +609,7 @@ export default function DealRoom() {
               <optgroup label="Missions">
                 {missions.map((m) => (
                   <option key={m.id} value={`mission:${m.id}`}>
-                    {m.title} ({money(rules && !rogue && selection === `mission:${m.id}` ? rules.budgetUsd : m.budgetUsd)})
+                    {m.title}
                   </option>
                 ))}
               </optgroup>
@@ -643,10 +654,14 @@ export default function DealRoom() {
               </button>
             </div>
             <p id="rules-preview" className="rules-preview" aria-live="polite">
-              <span className="rules-title" aria-hidden="true">
-                Your rules
-              </span>{" "}
-              {rulesNote ? <span className="rules-note">{rulesNote}.</span> : preview}
+              {(rulesNote || preview) && (
+                <>
+                  <span className="rules-title" aria-hidden="true">
+                    Your rules
+                  </span>{" "}
+                  {rulesNote ? <span className="rules-note">{rulesNote}.</span> : preview}
+                </>
+              )}
             </p>
           </fieldset>
           </div>
@@ -716,8 +731,7 @@ export default function DealRoom() {
         <div className="mission">
           <div className="goal-box">
             <span className="label">{run.kind === "mission" ? "Mission" : run.kind === "rogue" ? "Stress test" : "Single deal"}</span>
-            <p className="goal">“{run.goal}”</p>
-            <span className="note">Deal #{run.seed} always replays the same deal.</span>
+            <p className="goal">“{quoteGoal(run.goal)}”</p>
           </div>
           <div className="budget">
             <span className="label">Budget</span>
@@ -783,17 +797,15 @@ export default function DealRoom() {
             <div className="pc limit" title="The most AgentGuard lets the agent pay for this item">
               <span className="label">Your limit</span>
               <b>{line.rules.itemCapUsd !== undefined ? money(line.rules.itemCapUsd) : money(run.budgetUsd)}</b>
-              <span className="pc-sub">of {money(run.budgetUsd)} budget</span>
             </div>
             <div className="ladder" aria-label="Agent's planned offers">
-              <span className="label">{item.name} · planned offers</span>
+              <span className="label">Planned offers</span>
               <div className="rungs">
                 {view.plan.offers.map((o, i) => (
                   <span key={o} className={`rung${view.dealPrice === null && i === view.offerIndex ? " now" : i <= view.offerIndex ? " used" : ""}`}>
                     ${o}
                   </span>
                 ))}
-                {view.dealPrice !== null && <span className="rung deal">Deal ${view.dealPrice}</span>}
               </div>
             </div>
           </div>
@@ -808,8 +820,6 @@ export default function DealRoom() {
             agentOffer={view.agentOffer}
             dealPrice={view.dealPrice ?? (arenaState === "deal" || arenaState === "blocked" ? deal?.outcome.amountToPay ?? null : null)}
             dealSellerId={view.dealSellerId}
-            target={view.plan?.target ?? null}
-            walkAway={view.plan?.walkAway ?? null}
             state={arenaState}
           />
           <Caption lines={view.commentary} event={view.event} badge={voicedLine(view.line) ? "Live AI voices · Claude" : null} />
@@ -819,8 +829,6 @@ export default function DealRoom() {
           <Gate
             guard={view.guard}
             rows={gateRows}
-            blockedAmount={blocked ? deal?.outcome.amountToPay ?? null : null}
-            blockedSeller={blocked ? deal?.outcome.sellerName ?? null : null}
           />
           <div className="pipe" aria-hidden="true">
             <span>{pipe === "cut" ? "✕" : pipe === "hold" ? "❚❚" : "→"}</span>
@@ -831,7 +839,7 @@ export default function DealRoom() {
             </h2>
             <div className="checkout">
               {payRows.length === 0 && (
-                <div className={blocked ? "row-bad" : "row-info"}>{blocked ? "No payment was made. Nothing was sent to PayPal." : "Nothing sent to PayPal yet."}</div>
+                <div className={blocked ? "row-bad" : "row-info"}>{blocked ? "No payment was made." : "Nothing sent to PayPal yet."}</div>
               )}
               {payRows.map((r, i) => (
                 <div key={i} className={`row-${r.tone}`}>
@@ -894,10 +902,10 @@ export default function DealRoom() {
             <dl className="breakdown">
               <dt>Item</dt>
               <dd>{asking.itemName}</dd>
-              <dt>Price</dt>
-              <dd>{money(asking.deal.outcome.price ?? 0)}</dd>
               {asking.deal.outcome.fee > 0 && (
                 <>
+                  <dt>Price</dt>
+                  <dd>{money(asking.deal.outcome.price ?? 0)}</dd>
                   <dt>Fee charged now</dt>
                   <dd>{money(asking.deal.outcome.fee)}</dd>
                 </>

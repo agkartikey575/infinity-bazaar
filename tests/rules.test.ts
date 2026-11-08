@@ -370,14 +370,14 @@ test("the rules preview comes from the engine: the usual result over deals 1–2
     const text = rulesPreview("mission", MISSION, rules);
     const n = usual(rules);
     const buys = n === 3 ? "all 3 items" : `${n} of 3 items`;
-    assert.ok(text.startsWith(`With $${rules.budgetUsd}, your agent usually buys ${buys}`), text);
-    assert.ok(text.endsWith(` · anything over $${rules.askAboveUsd} asks you first`), text);
+    assert.ok(text.startsWith(`Usually buys ${buys}`), text);
+    // Only the outcome: the budget and approval limit are in the fields right above it.
+    assert.doesNotMatch(text, /\$/, text);
   }
-  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 120, askAboveUsd: 40 }), /usually buys 2 of 3 items and skips the rest to stay in budget · /, "matches what deal 42 actually does");
-  assert.match(rulesPreview("mission", MISSION, { budgetUsd: 300, askAboveUsd: 100 }), /usually buys all 3 items · /);
-  assert.match(rulesPreview("mission", "launch-week", { budgetUsd: 1000, askAboveUsd: 300 }), /^With \$1,000, .* anything over \$300 asks you first$/, "thousands commas");
-  assert.match(rulesPreview("single", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /usually gets it/);
-  assert.match(rulesPreview("rogue", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), /held to \$70/);
+  assert.equal(rulesPreview("mission", MISSION, { budgetUsd: 120, askAboveUsd: 40 }), "Usually buys 2 of 3 items and skips the rest to stay in budget.", "matches what deal 42 actually does");
+  assert.equal(rulesPreview("mission", MISSION, { budgetUsd: 300, askAboveUsd: 100 }), "Usually buys all 3 items.");
+  assert.equal(rulesPreview("single", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), "Usually gets it.");
+  assert.equal(rulesPreview("rogue", "usb-mic", { budgetUsd: 300, askAboveUsd: 100 }), "", "the stress test keeps its outcome a surprise");
 });
 
 test("typed amounts: decimals round to whole dollars, letters keep the rules in force", () => {

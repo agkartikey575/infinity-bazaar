@@ -198,11 +198,12 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await page.locator("#ask").fill("40");
     await page.locator("#ask").press("Enter");
     await page.waitForTimeout(200);
-    assert.match(await page.locator(".goal").innerText(), /Budget \$120\./, "the mission quote shows your budget");
+    assert.doesNotMatch(await page.locator(".goal").innerText(), /Budget/, "the budget shows in the rules field and the budget bar, not the quote");
+    assert.match(await page.locator(".goal").innerText(), /in 10 days\. Get me what I need/, "the quote still reads naturally");
     assert.match(await bnums(page), /Budget \$120\b/);
-    assert.match(await page.locator(".pc.limit").innerText(), /of \$120 budget/);
+    assert.doesNotMatch(await page.locator(".pc.limit").innerText(), /budget/);
     assert.match(await page.locator(".bask").getAttribute("title"), /\$40/);
-    assert.match(await page.locator("#rules-preview").innerText(), /With \$120, your agent usually buys 2 of 3 items and skips the rest to stay in budget · anything over \$40 asks you first/);
+    assert.match(await page.locator("#rules-preview").innerText(), /Usually buys 2 of 3 items and skips the rest to stay in budget\./);
     assert.equal(new URL(page.url()).search, "?deal=42&budget=120&ask=40", "the link carries the deal and your rules");
     // The engine skips an item to stay within $120; the screen says so in plain words.
     const skipped = exp.run.lines.findIndex((l) => l.deal.outcome.budgetSkip);
@@ -229,7 +230,7 @@ await check("390px: a limit above the budget is clamped with a short note, and R
   await page.waitForTimeout(200);
   assert.equal(await page.locator("#budget").inputValue(), "300");
   assert.equal(await page.locator("#ask").inputValue(), "100");
-  assert.match(await page.locator(".goal").innerText(), /Budget \$300\./);
+  assert.match(await bnums(page), /Budget \$300\b/);
 });
 
 await check("390px: decimals round to whole dollars, letters are refused, money has commas", { width: 390, height: 844 }, async (page) => {
@@ -247,8 +248,8 @@ await check("390px: decimals round to whole dollars, letters are refused, money 
   await page.locator("#budget").press("Enter");
   await page.waitForTimeout(200);
   assert.match(await bnums(page), /Budget \$1,000\b/);
-  assert.match(await page.locator(".goal").innerText(), /Budget \$1,000\./);
-  assert.match(await page.locator("#selection option:checked").innerText(), /\(\$1,000\)/, "the mission option shows your budget");
+  assert.doesNotMatch(await page.locator(".goal").innerText(), /Budget/);
+  assert.doesNotMatch(await page.locator("#selection option:checked").innerText(), /\$/, "the What to buy label carries no budget");
 });
 
 await check("1440px: a shared link sets the deal and rules; bad values fall back", { width: 1440, height: 900 }, async (page) => {
@@ -256,7 +257,7 @@ await check("1440px: a shared link sets the deal and rules; bad values fall back
   assert.equal(await page.locator("#seed").inputValue(), "7");
   assert.equal(await page.locator("#budget").inputValue(), "150");
   assert.equal(await page.locator("#ask").inputValue(), "60");
-  assert.match(await page.locator(".goal-box .note").innerText(), /Deal #7 always replays the same deal\./);
+  assert.equal(await page.locator(".goal-box .note").count(), 0, "the replay hint lives on the Deal # field only");
   await page.goto(`${BASE_URL}/?deal=abc&budget=5&ask=900`, { waitUntil: "networkidle" });
   assert.equal(await page.locator("#seed").inputValue(), "42");
   assert.equal(await page.locator("#budget").inputValue(), "300");
@@ -321,7 +322,7 @@ await check("1440px: losing sellers get a closing note and fees count in the gap
   await skip(page);
   const notes = await page.locator(".booth .sys").allTextContents();
   assert.equal(notes.length, 2, "both losing sellers get a note");
-  for (const n of notes) assert.match(n, /Out of the running — your agent went with /);
+  for (const n of notes) assert.equal(n, "Out of the running.");
   assert.match(await page.locator(".receipt").innerText(), /nothing spent/);
   assert.doesNotMatch(await page.locator(".receipt").innerText(), /saved \$0/);
   // A seller's checkout fee is part of the ask the agent compares against.
@@ -342,6 +343,22 @@ await check("pause stops playback", { width: 1440, height: 900 }, async (page) =
   const n = await page.locator(".msg").count();
   await page.waitForTimeout(2000);
   assert.equal(await page.locator(".msg").count(), n);
+});
+
+await check("1440px: each fact shows once while playing", { width: 1440, height: 900 }, async (page) => {
+  await page.selectOption("#speed", "4");
+  for (let i = 0; i < 6; i++) {
+    if (await page.getByRole("dialog").count()) await btn(page, "Approve").click();
+    else if (await btn(page, /Skip/).isDisabled()) break;
+    else await skip(page);
+    assert.doesNotMatch(await page.locator(".agent-strip").innerText(), /walks at/, "target and walk-away live in the price card");
+    const chip = page.locator(".caption .event");
+    if (await chip.count()) {
+      const event = (await chip.innerText()).replace(/^⚡\s*/, "");
+      assert.ok(!(await page.locator(".caption-body").innerText()).includes(event), "the twist chip never repeats the caption");
+    }
+  }
+  assert.equal(await page.locator(".rung.deal").count(), 0, "the agreed price shows in the agent strip, not the ladder");
 });
 
 await check("dark mode renders", { width: 390, height: 844 }, async (page) => {

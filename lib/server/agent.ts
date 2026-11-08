@@ -176,7 +176,8 @@ export async function pay(ref: RunRef, line: number, ledger: Ledger, userApprove
     if (url) return { decision: "needs_paypal_approval", guard, ledger, log: [], orderId: own.orderId, approveUrl: url };
   }
 
-  const log: LogRow[] = [{ text: `Double-checked on our server. ${guard.summary}`, tone: guard.decision === "approve" ? "ok" : guard.decision === "ask_user" ? "ask" : "bad" }];
+  // Approved: AgentGuard's own panel shows the verdict, so the payment row just confirms the server check.
+  const log: LogRow[] = [{ text: guard.decision === "approve" ? "Double-checked on our server." : `Double-checked on our server. ${guard.summary}`, tone: guard.decision === "approve" ? "ok" : guard.decision === "ask_user" ? "ask" : "bad" }];
   if (guard.decision === "block") {
     return { decision: "block", guard, ledger: transition(ledger, line, { state: "blocked", amountCents: amount }), log };
   }

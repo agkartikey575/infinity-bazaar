@@ -11,7 +11,6 @@ import type { GuardDecision } from "../src/engine/index.ts";
 
 export const SEAT_COLORS = ["var(--brass)", "var(--teal)", "var(--rose)"];
 const archetypeLabel = (id: string) => sellerData.archetypes.find((a) => a.id === id)?.label ?? id;
-const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
 
 type GapTone = "idle" | "open" | "close" | "met" | "over" | "out" | "won" | "blocked";
 
@@ -127,7 +126,8 @@ function Booth({
         {note && <p className="sys">{note}</p>}
       </div>
       <footer className="bfoot">
-        <GapBar booth={booth} gap={gap} />
+        {/* The note already says this seller is out, so the gauge doesn't repeat it. */}
+        <GapBar booth={booth} gap={note && gap.tone === "out" ? { ...gap, label: "" } : gap} />
         {floor !== null && <div className="floor">Lowest they'd accept: ${floor}</div>}
       </footer>
     </article>
@@ -158,8 +158,6 @@ export function Arena({
   agentOffer,
   dealPrice,
   dealSellerId,
-  target,
-  walkAway,
   state,
 }: {
   booths: BoothView[];
@@ -171,8 +169,6 @@ export function Arena({
   /** What the agreed deal costs all in, once agreed. */
   dealPrice: number | null;
   dealSellerId: string | null;
-  target: number | null;
-  walkAway: number | null;
   state: ArenaState;
 }) {
   const gaps = booths.map((b) => gapFor(b, span));
@@ -207,7 +203,8 @@ export function Arena({
 
   const winnerName = winner?.name ?? null;
   const noteFor = (b: BoothView) => {
-    if (winner && b.id !== winner.id && (winner.state === "won" || winner.state === "blocked")) return `Out of the running — your agent went with ${winnerName}.`;
+    // The winner is already highlighted, so the note doesn't name it again.
+    if (winner && b.id !== winner.id && (winner.state === "won" || winner.state === "blocked")) return "Out of the running.";
     if (b.state === "out" && b.messages.at(-1)?.from !== "seller") return "Out of the running.";
     return null;
   };
@@ -228,11 +225,6 @@ export function Arena({
         </div>
         <span className="agent-name">Your agent</span>
         <span className="agent-offer">{offerText}</span>
-        {target !== null && walkAway !== null && (
-          <span className="agent-plan">
-            Target ${target} · walks at ${walkAway}
-          </span>
-        )}
         <span className={`agent-state ${state}`}>{STATE_WORD[state]}</span>
       </div>
 
@@ -300,7 +292,8 @@ export function Caption({ lines, event, badge }: { lines: string[]; event: strin
         </p>
         {lines[1] && <p className="history">{lines[1]}</p>}
       </div>
-      {event && <span className="event">⚡ {event}</span>}
+      {/* The twist chip only when the caption isn't already telling it. */}
+      {event && !lines.slice(0, 2).some((l) => l.includes(event)) && <span className="event">⚡ {event}</span>}
       {badge && <span className="ai-badge">{badge}</span>}
     </div>
   );
@@ -316,13 +309,9 @@ const LAMPS: { id: GuardDecision["decision"]; icon: string; text: string }[] = [
 export function Gate({
   guard,
   rows,
-  blockedAmount,
-  blockedSeller,
 }: {
   guard: GuardDecision | null;
   rows: CheckoutRow[];
-  blockedAmount: number | null;
-  blockedSeller: string | null;
 }) {
   const d = guard?.decision ?? "idle";
   // Passed checks read as a compact row of ticks; failures and the verdict stay full width.
@@ -346,11 +335,6 @@ export function Gate({
       {d === "block" && (
         <div className="blocked-hero">
           <div className="stamp">Blocked</div>
-          <p>
-            Your agent agreed to pay {blockedAmount !== null ? money(blockedAmount) : "it"}
-            {blockedSeller ? ` to ${blockedSeller}` : ""}. AgentGuard said no.
-            <b> Nothing was sent to PayPal.</b>
-          </p>
         </div>
       )}
       {passed.length > 0 && (

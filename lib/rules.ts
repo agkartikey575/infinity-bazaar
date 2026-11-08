@@ -107,8 +107,8 @@ export function paidCount(run: Run): number {
  * whatever asks you first. "Usually" is the middle result (the median).
  */
 export function rulesPreview(kind: "mission" | "single" | "rogue", id: string, rules: PlayerRules): string {
-  const ask = `anything over ${fmt(rules.askAboveUsd)} asks you first`;
-  if (kind === "rogue") return `The agent is held to $70 for this item, whatever it's told · ${ask}`;
+  // The stress test's outcome is the point of the demo, and its limit is in the price card.
+  if (kind === "rogue") return "";
   const counts: number[] = [];
   const skips: number[] = [];
   let total = 0;
@@ -119,10 +119,9 @@ export function rulesPreview(kind: "mission" | "single" | "rogue", id: string, r
     skips.push(run.lines.filter((l) => l.deal.outcome.budgetSkip).length);
   }
   const usual = median(counts);
-  if (kind === "single") return `With ${fmt(rules.budgetUsd)}, your agent usually ${usual ? "gets it" : "can't get it"} · ${ask}`;
-  const buys = usual === total ? `usually buys all ${total} items` : `usually buys ${usual} of ${total} items`;
-  const skipNote = median(skips) > 0 ? " and skips the rest to stay in budget" : "";
-  return `With ${fmt(rules.budgetUsd)}, your agent ${buys}${skipNote} · ${ask}`;
+  if (kind === "single") return usual ? "Usually gets it." : "Usually can't get it within this budget.";
+  const buys = usual === total ? `Usually buys all ${total} items` : `Usually buys ${usual} of ${total} items`;
+  return `${buys}${median(skips) > 0 ? " and skips the rest to stay in budget" : ""}.`;
 }
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
