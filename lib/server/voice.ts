@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { sellerData } from "../../src/engine/index.ts";
 import type { Beat } from "../../src/engine/index.ts";
 import { buildMissionRun, buildSingleRun, type Run } from "../timeline.ts";
+import type { PlayerRules } from "../rules.ts";
 
 export type VoiceKind = "mission" | "single" | "rogue";
 
@@ -149,8 +150,9 @@ export interface VoiceInputLine {
   text: string;
 }
 
-export function rebuild(kind: VoiceKind, id: string, seed: number): Run {
-  return kind === "mission" ? buildMissionRun(id, seed) : buildSingleRun(id, seed, kind === "rogue");
+/** The run as it plays, with your rules when you set them (they can change the deals). */
+export function rebuild(kind: VoiceKind, id: string, seed: number, rules?: PlayerRules): Run {
+  return kind === "mission" ? buildMissionRun(id, seed, rules) : buildSingleRun(id, seed, kind === "rogue", rules);
 }
 
 /** The beats Claude may reword: agent, seller and commentator lines with text. */
@@ -249,7 +251,9 @@ export function readResponse(res: VoiceResponse, input: { lines: VoiceInputLine[
 
 // ---------- Cache and budget ----------
 
-export const cacheKey = (kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number) => `${kind}:${id}:${seed}:${rogue ? 1 : 0}:${line}`;
+/** With no rules the key is exactly as before, so voices already cached stay valid. */
+export const cacheKey = (kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number, rules?: PlayerRules) =>
+  `${kind}:${id}:${seed}:${rogue ? 1 : 0}:${line}${rules ? `:r${rules.budgetUsd}-${rules.askAboveUsd}` : ""}`;
 
 /** Least recently used first out. */
 export class Lru<V> {
@@ -390,9 +394,9 @@ export function createVoicer(opts: VoicerOptions) {
   const none = (ms = 0): VoiceResult => ({ texts: {}, model: null, ms });
 
   /** The result, and whether Claude was really asked (not aborted or over budget before an answer). */
-  async function call(kind: VoiceKind, id: string, seed: number, line: number, signal: AbortSignal): Promise<[VoiceResult, boolean]> {
+  async function call(kind: VoiceKind, id: string, seed: number, line: number, signal: AbortSignal, rules?: PlayerRules): Promise<[VoiceResult, boolean]> {
     const started = Date.now();
-    const input = voiceInput(rebuild(kind, id, seed), line);
+    const input = voiceInput(rebuild(kind, id, seed, rules), line);
     if (!input.lines.length || !opts.client) return [none(), true];
     let asked = false;
     const body = buildRequest(model, input) as never;
@@ -445,8 +449,8 @@ export function createVoicer(opts: VoicerOptions) {
   }
 
   /** Rewritten texts for one line of a run. Never throws for Claude failures; returns no texts instead. */
-  async function voiceLine(kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number, ctx: VoiceContext = {}): Promise<VoiceResult> {
-    const key = cacheKey(kind, id, seed, rogue, line);
+  async function voiceLine(kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number, ctx: VoiceContext = {}, rules?: PlayerRules): Promise<VoiceResult> {
+    const key = cacheKey(kind, id, seed, rogue, line, rules);
     const hit = cache.get(key);
     if (hit) return { ...hit, ms: 0 };
     const lastFail = failed.get(key);
@@ -458,7 +462,7 @@ export function createVoicer(opts: VoicerOptions) {
       if (!perClient.take(ctx.client ?? "unknown")) return none();
       const ctrl = new AbortController();
       const flight: Flight = { ctrl, waiters: 0, p: Promise.resolve(none()) };
-      flight.p = call(kind, id, seed, line, ctrl.signal)
+      flight.p = call(kind, id, seed, line, ctrl.signal, rules)
         .then(([r, asked]) => {
           // Good answers are kept; a line that came back empty is not asked again for a while.
           if (Object.keys(r.texts).length) cache.set(key, r);
@@ -500,6 +504,6 @@ export function voicer() {
   return shared;
 }
 
-export function voiceLine(kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number, ctx?: VoiceContext) {
-  return voicer().voiceLine(kind, id, seed, rogue, line, ctx);
+export function voiceLine(kind: VoiceKind, id: string, seed: number, rogue: boolean, line: number, ctx?: VoiceContext, rules?: PlayerRules) {
+  return voicer().voiceLine(kind, id, seed, rogue, line, ctx, rules);
 }

@@ -6,12 +6,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { clampDraft, clampRules, fmt, paidCount, parseDollars, PREVIEW_DEALS, readRules, rulesFromQuery, rulesPreview, rulesProblem, sameRules, WHOLE_DOLLARS_NOTE } from "../lib/rules.ts";
 import { buildMissionRun, buildSingleRun, buildSteps, deriveView, type Decision, type Run } from "../lib/timeline.ts";
-import { complete, declineLine, deliver, guardLine, pay, rebuildRun } from "../lib/server/agent.ts";
+import { complete, declineLine, deliver, guardLine, lineKey, pay, rebuildRun } from "../lib/server/agent.ts";
+import { cacheKey, rebuild, voiceInput } from "../lib/server/voice.ts";
 import { PayPalClient } from "../lib/server/paypal.ts";
 import { toCents } from "../lib/money.ts";
 import { emptyLedger, readLedger, signLedger, transition, type Ledger, type RunRef } from "../lib/server/ledger.ts";
 import { HttpError, readRunRef } from "../lib/server/request.ts";
-import { getMission, missionRules } from "../src/engine/index.ts";
+import { getMission, missionRules, runDeal } from "../src/engine/index.ts";
 
 const SECRET = "test-secret";
 const MISSION = "hackathon-10-days";
@@ -36,7 +37,7 @@ async function server(r: RunRef, answer: Decision = "approved") {
   const out: string[] = [];
   for (let i = 0; i < run.lines.length; i++) {
     if (run.lines[i].deal.outcome.status !== "deal") {
-      out.push("no-deal");
+      out.push(run.lines[i].deal.outcome.budgetSkip ? "skipped" : "no-deal");
       continue;
     }
     let res = await pay(r, i, ledger, false, ctx);
@@ -185,13 +186,14 @@ test("a low budget makes the agent skip an item, in plain words, before any mone
   assert.equal(skipped.deal.outcome.status, "walk-away");
   const words = skipped.deal.beats.map((b) => b.text).join(" ");
   assert.match(words, /\$120 budget/);
-  assert.match(words, /Budget guard: the agent skips the .+ to stay within your \$120 budget\./);
+  assert.match(words, /Budget guard: the agent skips the .+ to keep the plan within your \$120 budget\./);
   const s = screen(r);
-  assert.equal(s[r.lines.indexOf(skipped)], "no-deal");
+  assert.equal(s[r.lines.indexOf(skipped)], "skipped", "a distinct Skipped status, not Walked away");
+  assert.match(words, /To keep room in your \$120 budget for the rest of the list, I'll pass on this one\./);
   assert.ok(!s.includes("blocked"), "nothing needs blocking");
   const steps = buildSteps(r, { 0: "approved" }).steps;
   const view = deriveView(r, steps, steps.findIndex((x) => x.type === "line-end" && x.line === r.lines.indexOf(skipped)) + 1);
-  assert.match(view.checkout[0].text, /Skipped to stay within your \$120 budget/);
+  assert.match(view.checkout[0].text, /Skipped to keep the plan within your \$120 budget/);
 });
 
 test("AgentGuard follows your approval limit: a low limit asks you first", () => {
@@ -395,4 +397,73 @@ test("money reads with thousands commas", () => {
   assert.equal(fmt(19.9), "$19.90");
   assert.match(rulesProblem({ budgetUsd: 5000, askAboveUsd: 60 })!, /\$1,000/);
   assert.match(buildMissionRun(MISSION, 42, { budgetUsd: 1000, askAboveUsd: 300 }).goal, /Budget \$1,000\./);
+});
+
+test("an item is skipped for the budget only when its deal would cost more than what's left", () => {
+  const rnd = lcg(7);
+  let skips = 0;
+  for (let i = 0; i < 600; i++) {
+    const id = ["hackathon-10-days", "launch-week", "home-studio"][rnd(0, 2)];
+    const seed = rnd(1, 999_999);
+    const budgetUsd = rnd(100, 400);
+    const run = buildMissionRun(id, seed, { budgetUsd, askAboveUsd: Math.min(budgetUsd, 100) });
+    const mission = getMission(id);
+    let left = budgetUsd;
+    run.lines.forEach((l, k) => {
+      const o = l.deal.outcome;
+      if (o.budgetSkip) {
+        skips++;
+        // The same table and seller memory, with no budget in the way.
+        const memory = k === 0 ? {} : run.lines[k - 1].deal.memory;
+        const free = runDeal(l.itemId, { seed: seed + k * 7919, itemCapUsd: mission.suggested.find((s) => s.item === l.itemId)!.itemCapUsd, memory });
+        assert.equal(free.outcome.status, "deal", `${id} deal ${seed} $${budgetUsd}: ${l.itemId} had a deal to skip`);
+        assert.ok(free.outcome.amountToPay! > left, `${id} deal ${seed} $${budgetUsd}: ${l.itemId} costs $${free.outcome.amountToPay}, $${left} left`);
+      }
+      if (o.status === "deal") left -= o.amountToPay!;
+    });
+  }
+  assert.ok(skips > 20, `enough skips seen: ${skips}`);
+});
+
+test("AI voices are written from the run with your rules", () => {
+  const rules = { budgetUsd: 150, askAboveUsd: 50 };
+  for (const seed of [1, 7, 42, 99]) {
+    const run = buildMissionRun(MISSION, seed, rules);
+    const voiced = rebuild("mission", MISSION, seed, rules);
+    run.lines.forEach((l, i) => {
+      // The lines sent to Claude are this run's own lines, in order, prices included.
+      const sent = voiceInput(voiced, i).lines;
+      for (const v of sent) {
+        const beat = l.deal.beats[v.i];
+        assert.equal(v.text, beat.text, `deal ${seed} line ${i} beat ${v.i}`);
+        assert.equal(v.price, "price" in beat ? beat.price : undefined);
+      }
+    });
+  }
+  assert.equal(cacheKey("mission", MISSION, 42, false, 0), "mission:hackathon-10-days:42:0:0", "no rules: the key is as before");
+  assert.equal(cacheKey("mission", MISSION, 42, false, 0, rules), "mission:hackathon-10-days:42:0:0:r150-50");
+  assert.notEqual(cacheKey("mission", MISSION, 42, false, 0, rules), cacheKey("mission", MISSION, 42, false, 0, { budgetUsd: 150, askAboveUsd: 60 }));
+});
+
+test("PayPal ids carry your rules, and are unchanged without them", async () => {
+  const plain = ref(42, undefined, "idsnonce001");
+  assert.equal(lineKey(plain, 2), "idsnonce001-2");
+  const a = ref(42, { budgetUsd: 150, askAboveUsd: 50 }, "idsnonce001");
+  const b = ref(42, { budgetUsd: 160, askAboveUsd: 50 }, "idsnonce001");
+  assert.match(lineKey(a, 2), /^idsnonce001-[0-9a-f]{8}-2$/);
+  assert.notEqual(lineKey(a, 2), lineKey(b, 2), "same Play, other rules: other ids");
+  assert.equal(lineKey(a, 2), lineKey({ ...a }, 2), "stable");
+  // The order PayPal sees uses it for both the request id and the invoice id.
+  const seen: { rid: string | null; invoice?: string }[] = [];
+  const fetchFn = async (url: string | URL | Request, init?: RequestInit) => {
+    const u = new URL(String(url));
+    if (u.pathname === "/v1/oauth2/token") return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }));
+    const body = JSON.parse(String(init?.body));
+    seen.push({ rid: new Headers(init?.headers).get("PayPal-Request-Id"), invoice: body.purchase_units?.[0]?.invoice_id });
+    return new Response(JSON.stringify({ id: "O1", status: "PAYER_ACTION_REQUIRED", links: [{ rel: "payer-action", href: "https://x/approve" }] }), { status: 201 });
+  };
+  const client = new PayPalClient({ base: "https://paypal.test", clientId: "id", secret: "s", fetch: fetchFn as typeof fetch, timeoutMs: 200, backoffMs: 1 });
+  await pay(a, 0, emptyLedger(a), true, { paypal: client, vaultId: null, returnUrl: "https://app/return" });
+  assert.equal(seen[0].rid, `${lineKey(a, 0)}:create`);
+  assert.equal(seen[0].invoice, `IB-${lineKey(a, 0)}`);
 });

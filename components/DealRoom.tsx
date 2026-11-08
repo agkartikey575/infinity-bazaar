@@ -32,6 +32,7 @@ const STATUS_LABEL: Record<LineStatus, string> = {
   declined: "Declined",
   blocked: "Blocked",
   "no-deal": "Walked away",
+  skipped: "Skipped",
   voided: "Hold released",
 };
 
@@ -270,11 +271,11 @@ export default function DealRoom() {
   // AgentGuard check and payment. A line keeps the words it started with, so text on
   // screen never changes mid-read; voices that arrive later apply from the next line.
   const voiceId = rogue ? "usb-mic" : selection.split(":")[1];
-  const voiceRef = useMemo(() => ({ kind: run.kind, id: voiceId, seed }), [run.kind, voiceId, seed]);
+  const voiceRef = useMemo(() => ({ kind: run.kind, id: voiceId, seed, ...(rules ? { rules } : {}) }), [run.kind, voiceId, seed, rules]);
   const ai = useVoices(voiceRef, run.lines.length, playing);
   const [showOriginal, setShowOriginal] = useState(false);
   const started = cursor > 0 && baseSteps.length ? baseSteps[Math.min(cursor, baseSteps.length) - 1].line : -1;
-  const playKey = `${run.kind}:${voiceId}:${seed}:${nonce}`;
+  const playKey = `${run.kind}:${voiceId}:${seed}:${nonce}${rules ? `:r${rules.budgetUsd}-${rules.askAboveUsd}` : ""}`;
   // The words each started line plays with, for this Play. Until the effect below records
   // a line, it shows its current voices, which are exactly what the effect then records.
   const [frozen, setFrozen] = useState<{ key: string; lines: Record<number, LineVoices | null> }>({ key: "", lines: {} });
@@ -553,7 +554,7 @@ export default function DealRoom() {
   const arenaState =
     lineStatus === "blocked"
       ? "blocked"
-      : lineStatus === "no-deal"
+      : lineStatus === "no-deal" || lineStatus === "skipped"
         ? "walked"
         : lineStatus === "declined"
           ? "declined"

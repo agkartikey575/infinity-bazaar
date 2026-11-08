@@ -13,6 +13,8 @@ export interface VoiceRef {
   kind: "mission" | "single" | "rogue";
   id: string;
   seed: number;
+  /** Your rules, when set: they can change the deals, so the voices follow them. */
+  rules?: { budgetUsd: number; askAboveUsd: number };
 }
 
 const NONE: Record<number, LineVoices> = {};
@@ -27,7 +29,7 @@ const EMPTY_TTL_MS = 10 * 60 * 1000;
 
 export function useVoices(ref: VoiceRef, lineCount: number, playing: boolean) {
   const [enabled, setEnabled] = useState(false);
-  const key = `${ref.kind}:${ref.id}:${ref.seed}`;
+  const key = `${ref.kind}:${ref.id}:${ref.seed}${ref.rules ? `:r${ref.rules.budgetUsd}-${ref.rules.askAboveUsd}` : ""}`;
   const [voices, setVoices] = useState<{ key: string; lines: Record<number, LineVoices> }>({ key: "", lines: NONE });
   /** Requests for the current run: which lines are loading or done, and how to cancel them. */
   const job = useRef<{ key: string; ctrl: AbortController; busy: Set<number>; done: Set<number> } | null>(null);

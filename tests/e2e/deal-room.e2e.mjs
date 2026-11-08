@@ -71,7 +71,7 @@ async function checkSheet(page, viewport) {
 }
 
 // Expected outcomes come from the engine itself, so this test follows engine changes.
-const LABEL = { captured: "Paid", declined: "Declined", voided: "Hold released", blocked: "Blocked", "no-deal": "Walked away" };
+const LABEL = { captured: "Paid", declined: "Declined", voided: "Hold released", blocked: "Blocked", "no-deal": "Walked away", skipped: "Skipped" };
 function expected(seed, answer, rules) {
   const run = buildMissionRun("hackathon-10-days", seed, rules);
   const decisions = {};
@@ -207,7 +207,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     // The engine skips an item to stay within $120; the screen says so in plain words.
     const skipped = exp.run.lines.findIndex((l) => l.deal.outcome.budgetSkip);
     assert.ok(skipped >= 0, "deal 42 at $120 skips an item for the budget");
-    assert.equal(exp.pills[skipped], "Walked away");
+    assert.equal(exp.pills[skipped], "Skipped");
     await playToEnd(page, "approved");
     assert.deepEqual(await pills(page), exp.pills, "statuses match the engine under your rules");
     assert.ok(!exp.pills.includes("Blocked"), "nothing needs blocking: the agent stayed within budget");

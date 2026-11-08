@@ -208,6 +208,8 @@ export type LineStatus =
   | "declined"
   | "blocked"
   | "no-deal"
+  /** The agent passed on the item to keep the plan within your budget. */
+  | "skipped"
   | "voided";
 
 export interface BoothView {
@@ -457,9 +459,9 @@ export function deriveView(run: Run, steps: Step[], cursor: number): View {
         break;
       case "line-end":
         revealFloors = true;
-        if (statuses[step.line] === "negotiating") statuses[step.line] = "no-deal";
+        if (statuses[step.line] === "negotiating") statuses[step.line] = o.budgetSkip ? "skipped" : "no-deal";
         if (o.status !== "deal")
-          checkout = [{ text: o.budgetSkip ? `Skipped to stay within your ${money(run.budgetUsd)} budget. Nothing was spent.` : "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info", source: "guard" }];
+          checkout = [{ text: o.budgetSkip ? `Skipped to keep the plan within your ${money(run.budgetUsd)} budget. Nothing was spent.` : "No seller met our price, so the agent walked away. Nothing was spent.", tone: "info", source: "guard" }];
         break;
     }
   }

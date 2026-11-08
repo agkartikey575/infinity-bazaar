@@ -1,7 +1,6 @@
 // Runs a whole mission: every item's deal, each payment checked by AgentGuard.
 // Assumes you approve every "ask you" payment; the deal room asks for real.
 import { getItem, getMission } from "./data.ts";
-import { planBuyer } from "./buyer.ts";
 import { runDeal, type DealOptions } from "./deal.ts";
 import { checkPayment, type GuardDecision, type GuardRules } from "./guard.ts";
 import type { DealResult, Mission, SellerMemory } from "./types.ts";
@@ -46,33 +45,49 @@ const theItem = (phrase: string) => phrase.replace(/^(an?|some) /i, "the ");
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 /**
- * One item under your own budget: the agent never plans past what's left,
- * counting every earlier deal as paid. Too little left to even open, and it
- * passes on the item; a walk-away the budget caused says so.
+ * One item under your own budget. The plan counts every earlier deal as paid,
+ * and the agent never plans past what's left:
+ * - it passes on the item without haggling only when what's left is below the
+ *   item's lowest price online and the deal it would otherwise make costs more;
+ * - otherwise it haggles with its limit lowered to what's left, and may walk away;
+ * - only a walk-away the budget caused (the deal it would otherwise make costs
+ *   more than what's left) is marked as a budget skip and says so.
  */
 function withinBudget(itemId: string, itemCapUsd: number, left: number, budgetUsd: number, opts: DealOptions): DealResult {
   const item = getItem(itemId);
+  // The deal the agent would make with no budget in the way, from the same table and memory.
+  const free = runDeal(itemId, { ...opts, itemCapUsd });
+  const budgetCaused = free.outcome.status === "deal" && (free.outcome.amountToPay ?? 0) > left;
+  const agentLine = `To keep room in your ${usd(budgetUsd)} budget for the rest of the list, I'll pass on this one.`;
+  const casterLine = `Budget guard: the agent skips ${theItem(item.phrase)} to keep the plan within your ${usd(budgetUsd)} budget.`;
   const cap = Math.max(0, Math.min(itemCapUsd, left));
+  if (cap === itemCapUsd) return free;
   const deal = runDeal(itemId, { ...opts, itemCapUsd: cap });
-  const skipLine = `Budget guard: the agent skips ${theItem(item.phrase)} to stay within your ${usd(budgetUsd)} budget.`;
-  // Not enough left for even the opening offer, or (a safety net the engine never needs) a deal past what's left.
-  const opening = planBuyer(item).anchor;
-  if (cap < opening || (deal.outcome.status === "deal" && (deal.outcome.amountToPay ?? 0) > left)) {
+  // Too little left for even the lowest price online (or, a safety net the engine never needs, a deal past what's left).
+  const overspends = deal.outcome.status === "deal" && (deal.outcome.amountToPay ?? 0) > left;
+  if ((left < item.price.low && budgetCaused) || overspends) {
     const sellers = deal.sellers.map((s) => ({ ...s, finalAsk: s.openAsk, active: true }));
     return {
       ...deal,
       sellers,
       beats: [
-        { kind: "agent", round: 1, to: sellers.map((s) => s.id), move: "walk-away", text: `That would put me over your ${usd(budgetUsd)} budget, so I'll pass on this one.` },
-        { kind: "commentary", round: 1, text: skipLine },
+        { kind: "agent", round: 1, to: sellers.map((s) => s.id), move: "walk-away", text: agentLine },
+        { kind: "commentary", round: 1, text: casterLine },
       ],
       outcome: { status: "walk-away", rounds: 1, fee: 0, futureFee: 0, levers: [], terms: [], afterPayment: null, budgetSkip: true },
       memory: structuredClone(opts.memory ?? {}),
     };
   }
-  if (deal.outcome.status !== "deal" && cap < itemCapUsd) {
-    const last = deal.beats.at(-1)?.round ?? 1;
-    return { ...deal, beats: [...deal.beats, { kind: "commentary", round: last, text: skipLine }], outcome: { ...deal.outcome, budgetSkip: true } };
+  if (deal.outcome.status !== "deal" && budgetCaused) {
+    const round = deal.beats.at(-1)?.round ?? 1;
+    // Said to whoever is still at the table, or else to the closest seller, so the reason is always on screen.
+    const open = deal.sellers.filter((s) => s.active);
+    const to = (open.length ? open : [deal.sellers.reduce((m, s) => (s.finalAsk < m.finalAsk ? s : m))]).map((s) => s.id);
+    return {
+      ...deal,
+      beats: [...deal.beats, { kind: "agent", round, to, move: "walk-away", text: agentLine }, { kind: "commentary", round, text: casterLine }],
+      outcome: { ...deal.outcome, budgetSkip: true },
+    };
   }
   return deal;
 }

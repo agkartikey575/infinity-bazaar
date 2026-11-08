@@ -1,6 +1,7 @@
 // The agent's payment service. The browser only names a run (kind, id, seed,
 // nonce) and a line; the server replays the deterministic engine, computes the
 // amount itself, runs AgentGuard against the signed ledger, and only then calls PayPal.
+import { createHash } from "node:crypto";
 import { checkPayment, getItem, type GuardDecision } from "../../src/engine/index.ts";
 import { toCents, toValue, type Cents } from "../money.ts";
 import { buildMissionRun, buildSingleRun, type Run } from "../timeline.ts";
@@ -36,7 +37,14 @@ export function rebuildRun(ref: RunRef): Run {
  * Stable per run and line, so retries reuse PayPal request ids and invoice ids.
  * The nonce makes every Play unique: two visitors on the same table never share ids.
  */
-export const lineKey = (ref: RunRef, line: number) => `${ref.nonce}-${line}`;
+export const lineKey = (ref: RunRef, line: number) => (ref.rules ? `${ref.nonce}-${rulesTag(ref.rules)}-${line}` : `${ref.nonce}-${line}`);
+
+/**
+ * A short hash of your rules for PayPal ids, so the same Play under other rules
+ * (a different amount) can never reuse an order. With no rules the ids are as before.
+ */
+export const rulesTag = (rules: { budgetUsd: number; askAboveUsd: number }) =>
+  createHash("sha256").update(`${rules.budgetUsd}/${rules.askAboveUsd}`).digest("hex").slice(0, 8);
 
 interface Ctx {
   paypal: PayPalClient | null;
