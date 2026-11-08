@@ -737,6 +737,19 @@ export default function DealRoom() {
           </div>
         </div>
 
+        <div className="list">
+          <span className="label">Shopping list · the agent haggles for each, in order</span>
+          <div className="rows">
+            {run.lines.map((l, i) => (
+              <div key={l.itemId + i} className={`row${i === view.line && !finished ? " current" : ""}`}>
+                <span className="row-name">{l.itemName}</span>
+                <span className={`pill ${view.statuses[i]}`}>{STATUS_LABEL[view.statuses[i]]}</span>
+                <b>{view.amounts[i] !== null ? money(view.amounts[i]!) : "—"}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {item && view.plan && (
           <div className="pricecard">
             <div className="pc">
@@ -854,19 +867,6 @@ export default function DealRoom() {
                 : "Demo mode: payments are simulated."}
             </span>
           </section>
-        </div>
-
-        <div className="list">
-          <span className="label">Shopping list</span>
-          <div className="rows">
-            {run.lines.map((l, i) => (
-              <div key={l.itemId + i} className={`row${i === view.line && !finished ? " current" : ""}`}>
-                <span className="row-name">{l.itemName}</span>
-                <span className={`pill ${view.statuses[i]}`}>{STATUS_LABEL[view.statuses[i]]}</span>
-                <b>{view.amounts[i] !== null ? money(view.amounts[i]!) : "—"}</b>
-              </div>
-            ))}
-          </div>
         </div>
 
         {finished && <Receipt run={run} statuses={view.statuses} />}
