@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 import { buildMissionRun, buildSteps, deriveView } from "../../lib/timeline.ts";
 import { getItem } from "../../src/engine/index.ts";
-import { approveInPayPal, BASE_URL, cancelInPayPal, findTable, paypalOrder, requireBuyer, savePopup } from "./paypal-helpers.mjs";
+import { approveInPayPal, BASE_URL, cancelInPayPal, findTable, panelReport, paymentStatus, paypalOrder, requireBuyer, savePopup, trackOrders } from "./paypal-helpers.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -44,38 +44,6 @@ function findMissionTable() {
   }
   if (!fallback) throw new Error("no mission table with an ask-you line");
   return fallback;
-}
-
-/** Records the PayPal order id of every line, from the app's own API replies. */
-function trackOrders(page) {
-  const orders = {};
-  page.on("response", async (res) => {
-    if (!/\/api\/agent\/(pay|complete|deliver|decline)$/.test(new URL(res.url()).pathname)) return;
-    try {
-      const line = JSON.parse(res.request().postData() ?? "{}").line;
-      const data = await res.json();
-      const id = data.orderId ?? (data.log ?? []).map((r) => r.detail?.match(/order ([A-Z0-9]{17})/)?.[1]).find(Boolean);
-      if (id && Number.isInteger(line)) orders[line] ??= id;
-    } catch {
-      // not JSON, or the page went away
-    }
-  });
-  return orders;
-}
-
-/** PayPal's payment status for an order: the authorization for a hold, else the capture. */
-function paymentStatus(order) {
-  const p = order.purchase_units?.[0]?.payments ?? {};
-  return { auth: p.authorizations?.[0]?.status ?? null, capture: p.captures?.[0]?.status ?? null };
-}
-
-/** What to report when the app, not the test, goes wrong: the Payment panel with details on. */
-async function panelReport(page) {
-  const box = page.getByLabel("Show PayPal details");
-  if (!(await box.isChecked().catch(() => true))) await box.check().catch(() => undefined);
-  const text = await page.locator(".paypal").innerText().catch(() => "(no panel)");
-  const debug = [...new Set(text.match(/debug id [\w-]+/gi) ?? [])];
-  return `Payment panel:\n    ${text.split("\n").join("\n    ")}${debug.length ? `\n  PayPal ${debug.join(", ")}` : ""}`;
 }
 
 async function openRoom(ctx) {
