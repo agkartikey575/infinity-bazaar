@@ -467,3 +467,23 @@ test("PayPal ids carry your rules, and are unchanged without them", async () => 
   assert.equal(seen[0].rid, `${lineKey(a, 0)}:create`);
   assert.equal(seen[0].invoice, `IB-${lineKey(a, 0)}`);
 });
+
+test("the skip line fits where the item sits: the last item has no rest of the list", () => {
+  const last = buildMissionRun(MISSION, 11, { budgetUsd: 150, askAboveUsd: 50 });
+  const end = last.lines.at(-1)!;
+  assert.ok(end.deal.outcome.budgetSkip, "deal 11 at $150 skips the last item");
+  const said = end.deal.beats.filter((b) => b.kind === "agent").map((b) => b.text);
+  assert.ok(said.includes("With what's already planned, this one won't fit in your $150 budget, so I'll pass."));
+  assert.ok(!said.some((t) => /rest of the list/.test(t)));
+  // Across many setups: "rest of the list" only ever before the last item.
+  const rnd = lcg(11);
+  for (let i = 0; i < 400; i++) {
+    const budgetUsd = rnd(100, 300);
+    const run = buildMissionRun(MISSION, rnd(1, 99_999), { budgetUsd, askAboveUsd: 50 });
+    run.lines.forEach((l, k) => {
+      const text = l.deal.beats.map((b) => b.text).join(" ");
+      if (k === run.lines.length - 1) assert.doesNotMatch(text, /rest of the list/);
+      else assert.doesNotMatch(text, /With what's already planned/);
+    });
+  }
+});

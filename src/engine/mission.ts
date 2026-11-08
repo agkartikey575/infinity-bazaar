@@ -53,12 +53,15 @@ const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
  * - only a walk-away the budget caused (the deal it would otherwise make costs
  *   more than what's left) is marked as a budget skip and says so.
  */
-function withinBudget(itemId: string, itemCapUsd: number, left: number, budgetUsd: number, opts: DealOptions): DealResult {
+function withinBudget(itemId: string, itemCapUsd: number, left: number, budgetUsd: number, opts: DealOptions, last = false): DealResult {
   const item = getItem(itemId);
   // The deal the agent would make with no budget in the way, from the same table and memory.
   const free = runDeal(itemId, { ...opts, itemCapUsd });
   const budgetCaused = free.outcome.status === "deal" && (free.outcome.amountToPay ?? 0) > left;
-  const agentLine = `To keep room in your ${usd(budgetUsd)} budget for the rest of the list, I'll pass on this one.`;
+  // The last item has no "rest of the list" to keep room for.
+  const agentLine = last
+    ? `With what's already planned, this one won't fit in your ${usd(budgetUsd)} budget, so I'll pass.`
+    : `To keep room in your ${usd(budgetUsd)} budget for the rest of the list, I'll pass on this one.`;
   const casterLine = `Budget guard: the agent skips ${theItem(item.phrase)} to keep the plan within your ${usd(budgetUsd)} budget.`;
   const cap = Math.max(0, Math.min(itemCapUsd, left));
   if (cap === itemCapUsd) return free;
@@ -120,7 +123,7 @@ export function runMission(
     if (opts.budgetUsd === undefined) {
       deal = runDeal(entry.item, { ...opts.dealOptions, seed: dealSeed, itemCapUsd: capFor(mission, entry.itemCapUsd, spent + pending), memory });
     } else {
-      deal = withinBudget(entry.item, entry.itemCapUsd, left, opts.budgetUsd, { ...opts.dealOptions, seed: dealSeed, memory });
+      deal = withinBudget(entry.item, entry.itemCapUsd, left, opts.budgetUsd, { ...opts.dealOptions, seed: dealSeed, memory }, i === items.length - 1);
       if (deal.outcome.status === "deal") left -= deal.outcome.amountToPay ?? 0;
     }
     memory = deal.memory;
