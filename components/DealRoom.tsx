@@ -15,7 +15,7 @@ import {
   type Step,
 } from "../lib/timeline.ts";
 import { ASK_MAX, ASK_MIN, BUDGET_MAX, BUDGET_MIN, clampDraft, fmt, rulesFromQuery, rulesPreview, sameRules, type PlayerRules } from "../lib/rules.ts";
-import { newNonce, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
+import { newNonce, openPayPalWindow, useLivePayPal, type LiveState } from "./useLivePayPal.ts";
 import { useVoices, type LineVoices } from "./useVoices.ts";
 import { Arena, Caption, Gate } from "./Arena.tsx";
 
@@ -478,7 +478,7 @@ export default function DealRoom() {
    * Starts the run again with a new nonce. Rules typed but not applied yet are
    * applied now; `resetRules` goes back to the run's own budget and approval limit.
    */
-  const restart = (next: { selection?: string; seed?: number; rogue?: boolean; resetRules?: boolean }) => {
+  const restart = (next: { selection?: string; seed?: number; rogue?: boolean; resetRules?: boolean; autoplay?: boolean }) => {
     const sel = next.selection ?? selection;
     const isRogue = next.rogue ?? false;
     const target = defaultsFor(sel, isRogue);
@@ -502,13 +502,14 @@ export default function DealRoom() {
     setNonce(newNonce());
     setDecisions({});
     setCursor(0);
-    setPlaying(true);
+    // Settings (the PayPal switch, your rules) only reset the deal; Play starts it.
+    setPlaying(next.autoplay ?? true);
   };
 
   /** Enter, or focus leaving the rules: apply them if they changed, and say so if they had to be adjusted. */
   const applyRules = () => {
     const c = draftRules(applied);
-    if (!sameRules(c.rules, applied)) return restart({ seed, rogue });
+    if (!sameRules(c.rules, applied)) return restart({ seed, rogue, autoplay: false });
     setRulesNote(c.note);
     setBudgetDraft(String(applied.budgetUsd));
     setAskDraft(String(applied.askAboveUsd));
@@ -527,7 +528,7 @@ export default function DealRoom() {
     if (waitingFor === null) return;
     if (live.enabled) {
       // Open the PayPal window inside the click, so the browser doesn't block it.
-      if (d === "approved") pendingWin.current = window.open("", "paypal", "width=480,height=720");
+      if (d === "approved") pendingWin.current = openPayPalWindow();
       else live.decline(waitingFor);
     }
     setDecisions((prev) => ({ ...prev, [waitingFor]: d }));
@@ -708,7 +709,7 @@ export default function DealRoom() {
                   checked={live.enabled}
                   onChange={(e) => {
                     live.setEnabled(e.target.checked);
-                    restart({ seed, rogue });
+                    restart({ seed, rogue, autoplay: false });
                   }}
                 />
                 PayPal sandbox (test money)
@@ -860,7 +861,7 @@ export default function DealRoom() {
             {live.enabled && live.lines[view.line]?.state === "needs-decision" && (
               <div className="row-ask">
                 AgentGuard on the server wants your OK for this payment.{" "}
-                <button className="primary" onClick={() => live.pay(view.line, true, window.open("", "paypal", "width=480,height=720"))}>
+                <button className="primary" onClick={() => live.pay(view.line, true, openPayPalWindow())}>
                   Approve
                 </button>{" "}
                 <button onClick={() => live.decline(view.line)}>Decline</button>

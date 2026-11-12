@@ -45,6 +45,27 @@ interface Status {
 }
 
 const POPUP = "width=480,height=720";
+
+/**
+ * Opens (or reuses) the PayPal window and brings it to the front. A window left
+ * open from an earlier attempt is reused, so focusing it is what makes it visible.
+ * With no URL yet, it shows a short "Connecting to PayPal…" note instead of a blank page.
+ */
+export function openPayPalWindow(url?: string): Window | null {
+  const win = window.open(url ?? "", "paypal", POPUP);
+  if (!win) return null;
+  try {
+    win.focus();
+    if (!url && (win.location.href === "about:blank" || win.location.origin === window.location.origin)) {
+      win.document.title = "Connecting to PayPal…";
+      win.document.body.style.cssText = "margin:0;display:grid;place-items:center;height:100vh;font:16px system-ui,sans-serif;color:#444";
+      win.document.body.textContent = "Connecting to PayPal…";
+    }
+  } catch {
+    // The window is already on PayPal's site; it will be sent to the new address.
+  }
+  return win;
+}
 const BLOCKED = "Your browser blocked the PayPal window. Allow pop-ups for this site, then press Pay with PayPal.";
 
 /** Waits for the PayPal return page to post back, or for the window to close. */
@@ -158,7 +179,7 @@ export function useLivePayPal(run: RunRef) {
 
   const approveInWindow = useCallback(
     async (line: number, url: string, win: Window | null) => {
-      const w = win ?? window.open(url, "paypal", POPUP);
+      const w = win ?? openPayPalWindow(url);
       if (!w) return set(line, { state: "needs-click", approveUrl: url, rows: [{ text: BLOCKED, tone: "ask" }] });
       if (win) w.location.href = url;
       set(line, { state: "waiting-paypal", approveUrl: url, rows: [{ text: "Waiting for your approval in the PayPal window…", tone: "ask" }] });
@@ -201,7 +222,7 @@ export function useLivePayPal(run: RunRef) {
     (line: number) => {
       const url = lines[line]?.approveUrl;
       if (!url) return;
-      const win = window.open(url, "paypal", POPUP);
+      const win = openPayPalWindow(url);
       if (!win) return set(line, { state: "needs-click", rows: [{ text: BLOCKED, tone: "ask" }] });
       guarded(line, "complete", () => approveInWindow(line, url, win));
     },
@@ -242,7 +263,7 @@ export function useLivePayPal(run: RunRef) {
   /** Connect a PayPal wallet once, so approved payments go through with no one present. */
   const connectWallet = useCallback(async () => {
     setWalletError(null);
-    const win = window.open("", "paypal", POPUP);
+    const win = openPayPalWindow();
     if (!win) return setWalletError(BLOCKED.replace("Pay with PayPal", "Connect PayPal wallet"));
     try {
       const res = await fetch("/api/vault/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
