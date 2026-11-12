@@ -502,8 +502,8 @@ export default function DealRoom() {
     setNonce(newNonce());
     setDecisions({});
     setCursor(0);
-    // Settings (the PayPal switch, your rules) only reset the deal; Play starts it.
-    setPlaying(next.autoplay ?? true);
+    // Choosing a deal, mission, rules or the PayPal switch only sets up the deal; Play starts it.
+    setPlaying(next.autoplay ?? false);
   };
 
   /** Enter, or focus leaving the rules: apply them if they changed, and say so if they had to be adjusted. */
@@ -670,7 +670,7 @@ export default function DealRoom() {
             <button
               className="primary"
               disabled={awaiting}
-              onClick={() => (finished || rulesChanged() ? restart({ seed, rogue }) : setPlaying((p) => !p))}
+              onClick={() => (finished || rulesChanged() ? restart({ seed, rogue, autoplay: true }) : setPlaying((p) => !p))}
               aria-label={finished ? "Replay" : playing ? "Pause" : "Play"}
             >
               {finished ? "↺ Replay" : gate && !gate.ready && playing ? "Waiting for PayPal…" : playing ? "❚❚ Pause" : "▶ Play"}
