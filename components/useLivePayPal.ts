@@ -44,15 +44,14 @@ interface Status {
   wallet: boolean;
 }
 
-const POPUP = "width=480,height=720";
 
 /**
- * Opens (or reuses) the PayPal window and brings it to the front. A window left
- * open from an earlier attempt is reused, so focusing it is what makes it visible.
+ * Opens PayPal in a new tab and switches to it.
  * With no URL yet, it shows a short "Connecting to PayPal…" note instead of a blank page.
  */
 export function openPayPalWindow(url?: string): Window | null {
-  const win = window.open(url ?? "", "paypal", POPUP);
+  // A new tab every time, which the browser switches to. A leftover PayPal tab can never swallow the click.
+  const win = window.open(url ?? "", `paypal-${Date.now()}`);
   if (!win) return null;
   try {
     win.focus();
